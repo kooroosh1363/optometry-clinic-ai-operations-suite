@@ -4,6 +4,6 @@ export function createPool(connectionString) {
     idleTimeoutMillis: 10000, statement_timeout: 2000, query_timeout: 3000 });
 }
 export async function databaseReady(pool) {
-  const result = await pool.query('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1');
-  return result.rows[0]?.version === '001';
+  const result = await pool.query('SELECT version FROM schema_migrations ORDER BY version');
+  return result.rows.map(row => row.version).join(',') === '001,002';
 }

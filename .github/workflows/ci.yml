@@ -1,4 +1,4 @@
-name: Foundation CI
+name: Administrative API CI
 on:
   push:
     branches: [main, 'phase/**']
@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: foundation-${{ github.event_name }}-${{ github.ref }}
+  group: administrative-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   tests:
@@ -46,6 +46,10 @@ jobs:
       - run: docker compose config --quiet
       - run: docker compose up --build --wait --wait-timeout 120
       - run: curl --fail http://127.0.0.1:4000/health/ready
+      - name: Business routes require authentication
+        run: test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/v1/patients)" = 401
+      - name: Operator can provision a synthetic clinic
+        run: docker compose exec -T api node src/operator.js demo America/Vancouver
       - name: Dependency outage must fail readiness but preserve liveness
         run: |
           docker compose stop db

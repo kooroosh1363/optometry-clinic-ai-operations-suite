@@ -9,7 +9,7 @@ async function request(t, ready, path, method = 'GET') {
 }
 test('liveness never accesses the database', async t => {
   const r = await request(t, () => { throw new Error('must not run'); }, '/health/live');
-  assert.equal(r.status, 200); assert.equal((await r.json()).phase, 'foundation');
+  assert.equal(r.status, 200); assert.equal((await r.json()).phase, 'administrative_api');
 });
 test('ready only after schema verification', async t => {
   const r = await request(t, async () => true, '/health/ready'); assert.equal(r.status, 200);

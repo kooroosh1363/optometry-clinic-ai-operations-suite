@@ -4,20 +4,28 @@
 
 Use Node.js 24 with its HTTP and test libraries and the PostgreSQL driver. Configuration, HTTP routing, database access, and migrations have separate modules. This keeps the foundation inspectable; a larger API framework can be evaluated when authenticated business routes arrive. No UI framework decision is implied here.
 
-`src/server.js` owns process startup and shutdown. `src/app.js` owns only health responses. `src/config.js` validates startup inputs. `src/db.js` configures bounded database connections and schema readiness. `src/migrate.js` applies the versioned SQL migration.
+`src/server.js` owns startup/shutdown. `src/app.js` owns headers/health and dispatches business requests to `src/api.js`. `src/auth.js` verifies/creates credentials, `src/validation.js` validates inputs, and `src/operator.js` provisions synthetic clinics and credentials. `src/db.js` owns connections/readiness; `src/migrate.js` owns migrations.
 
 ## ADR 002: PostgreSQL enforces core integrity
 
-Composite references prevent an appointment from pointing to another clinic's patient or practitioner. Exclusion constraints prevent active overlapping slots for a patient or practitioner. This avoids depending on a vulnerable read-then-write availability check. Application authorization, valid practitioner roles, clinic timezone validation, and lifecycle transition rules remain Phase 2 work.
+Composite references prevent foreign-clinic appointment references. Exclusion constraints prevent active overlaps without relying on read-then-write availability checks. Phase 2 adds application authorization, practitioner validation, timezone checks and lifecycle rules. Trusted direct SQL can bypass the application rules.
 
 ## ADR 003: Controlled, transactional migrations
 
-Migration 001 is checksum tracked and serialized with a transaction-level advisory lock. Schema work and version recording commit together. An applied migration must never be edited; future schema changes use a new migration after extending the runner. The current runner supports only version 001. Deployment runs migration separately before API startup.
+Migrations are checksum tracked and serialized with transaction-level advisory locks. Schema work and version recording commit together for each version. Applied migrations must never be edited. The runner supports 001 and 002 in order, before API startup.
 
 ## ADR 004: Health is not authorization
 
-Liveness is independent of PostgreSQL; readiness requires schema version 001. Unknown paths return 404. No patient APIs are exposed before authorization and tenant-isolation tests exist. Database constraints do not prevent unauthorized reads.
+Liveness is independent of PostgreSQL; readiness requires versions 001 and 002. Business routes under /v1 require authentication and clinic scope. Database reference constraints do not prevent unauthorized reads; Phase 2 tests application query isolation separately.
 
 ## ADR 005: AI assists administration only
 
-Future agents may prepare administrative drafts, with human approval before external effects. They will not diagnose, prescribe, or decide clinical urgency. No model provider is invoked in Phase 1; no AI accuracy or financial improvement is claimed.
+Future agents may prepare administrative drafts with human approval before external effects. They will not diagnose, prescribe or decide clinical urgency. No model provider is invoked in Phases 1/2; no AI accuracy or financial improvement is claimed.
+
+## ADR 006: Operator-issued reference credentials
+
+Use random, hashed-at-rest bearer tokens with bounded expiry and revocation to avoid paid services and password/account recovery complexity for the API demonstration. This is not a full staff login system. Trusted operators use a CLI; Phase 3 must design browser credential handling explicitly. No automatic password/SSO migration is assumed.
+
+## ADR 007: Transactional authorization and updates
+
+Authenticated requests use database transactions. Shared token/staff locks keep authorization stable during a request; revocation takes effect after preceding authorized requests finish. Update routes lock their tenant-scoped record, check the supplied version and lifecycle rules, then update and append audit metadata atomically. Overlap violations map to HTTP 409. Deadlock/serialization failures return retry_request; clients must read current state before deciding to retry. Business mutations are not automatically retried.

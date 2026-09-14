@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createPool, databaseReady } from '../../src/db.js';
-import { migrate, migrationSql } from '../../src/migrate.js';
+import { migrate, migrateAll, migrationSql } from '../../src/migrate.js';
 
 // Fail, never silently skip: this suite requires an isolated disposable DB.
 if (!process.env.TEST_DATABASE_URL) throw new Error('TEST_DATABASE_URL required; use a disposable database');
@@ -10,6 +10,7 @@ const pool = createPool(process.env.TEST_DATABASE_URL);
 const sql = await migrationSql();
 test.after(async () => pool.end());
 test('migration is atomic, repeatable and checksum protected', async () => {
+  await migrateAll(pool);
   await migrate(pool, sql);
   assert.equal(await migrate(pool,sql), false);
   assert.equal(await databaseReady(pool), true);
@@ -54,7 +55,7 @@ test('cross-clinic patient reference is rejected',async t=>{
 });
 test('cross-clinic practitioner reference is rejected',async t=>{
   const f=await fixture(t); const s=randomUUID();
-  await f.c.query("INSERT INTO staff VALUES ($1,$2,'Other Staff','optometrist')",[f.other,s]);
+  await f.c.query("INSERT INTO staff(clinic_id,id,display_name,role) VALUES ($1,$2,'Other Staff','optometrist')",[f.other,s]);
   await assert.rejects(()=>f.insert({sid:s}),{code:'23503'});
 });
 for (const end of ['2030-01-01T10:00:00Z','2030-01-01T09:00:00Z']) {
@@ -68,7 +69,7 @@ test('same practitioner overlap rejected even for another patient',async t=>{
 });
 test('same patient overlap rejected even for another practitioner',async t=>{
   const f=await fixture(t);await f.insert();const s=randomUUID();
-  await f.c.query("INSERT INTO staff VALUES ($1,$2,'Second Staff','optometrist')",[f.clinic,s]);
+  await f.c.query("INSERT INTO staff(clinic_id,id,display_name,role) VALUES ($1,$2,'Second Staff','optometrist')",[f.clinic,s]);
   await assert.rejects(()=>f.insert({sid:s}),{code:'23P01'});
 });
 test('adjacent half-open appointments are allowed',async t=>{const f=await fixture(t);await f.insert();await f.insert({start:'2030-01-01T11:00:00Z',end:'2030-01-01T12:00:00Z'});});
