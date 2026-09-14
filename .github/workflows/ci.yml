@@ -1,0 +1,57 @@
+name: Foundation CI
+on:
+  push:
+    branches: [main, 'phase/**']
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: foundation-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: optometry
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: optometry_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U optometry -d optometry_test"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://optometry:ci-only-password@localhost:5432/optometry_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm audit --omit=dev --audit-level=high
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      POSTGRES_PASSWORD: ci-only-password
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+      - run: docker compose up --build --wait --wait-timeout 120
+      - run: curl --fail http://127.0.0.1:4000/health/ready
+      - name: Dependency outage must fail readiness but preserve liveness
+        run: |
+          docker compose stop db
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/health/ready)" = 503
+          curl --fail http://127.0.0.1:4000/health/live
+      - if: failure()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down --volumes

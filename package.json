@@ -1,0 +1,15 @@
+{
+  "name": "optometry-clinic-ai-operations-suite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "start": "node src/server.js",
+    "migrate": "node src/migrate.js",
+    "test": "node --test test/unit/*.test.js",
+    "test:integration": "node --test --test-concurrency=1 test/integration/*.test.js",
+    "check": "node scripts/check.js"
+  },
+  "dependencies": { "pg": "8.16.3" }
+}
