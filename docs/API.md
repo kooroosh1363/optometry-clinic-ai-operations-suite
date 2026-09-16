@@ -1,5 +1,23 @@
 # Administrative API v1
 
+## Phase 4 additions
+
+All routes retain authentication and clinic scope. POST responses use 201, including idempotent replays and recorded mock failures; inspect `data.status` and `receipt_id`.
+
+| Method/path | Permission | Input |
+| --- | --- | --- |
+| PATCH /v1/patients/:id/consent | Administrator | version (consent_version), granted (boolean) |
+| GET /v1/automation | Any staff | limit/offset |
+| GET /v1/automation/:id | Any staff | None; includes mock receipt_id |
+| POST /v1/automation | Administrator/receptionist | recall_id, request_key (UUID) |
+| POST /v1/automation/:id/approve | Administrator/receptionist | version |
+| POST /v1/automation/:id/reject | Administrator/receptionist | version |
+| POST /v1/automation/:id/execute | Administrator/receptionist | version |
+
+Content, recipient, actor, state, template and attempts are server-controlled. Reuse the request_key when retrying creation. Reusing it for another recall returns `idempotency_conflict`; a different key for an existing source revision returns `draft_exists`. Terminal simulated executions replay their receipt even with an older valid version; this does not execute again.
+
+409 errors: `consent_required`, `contact_required`, `source_changed`, `draft_exists`, `idempotency_conflict`, `approval_required`, `retry_exhausted`, plus existing version/transition errors. A `failed` record exposes only `mock_unavailable` and requires explicit execute using the returned version. Maximum three attempts. History is stored in PostgreSQL; no history UI or legal consent collection is claimed.
+
 Local synthetic demonstration only. Base URL: `http://127.0.0.1:4000`. Health routes are public; every `/v1/` route requires `Authorization: Bearer TOKEN`. Obtain credentials via README's trusted operator instructions. There is no HTTP login/token issuance route.
 
 ## Routes and roles

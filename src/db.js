@@ -5,5 +5,5 @@ export function createPool(connectionString) {
 }
 export async function databaseReady(pool) {
   const result = await pool.query('SELECT version FROM schema_migrations ORDER BY version');
-  return result.rows.map(row => row.version).join(',') === '001,002';
+  return result.rows.map(row => row.version).join(',') === '001,002,003';
 }

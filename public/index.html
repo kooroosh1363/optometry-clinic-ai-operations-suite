@@ -21,7 +21,7 @@
         <button class="primary wide" type="submit">Connect to clinic <span aria-hidden="true">→</span></button>
         <p id="connect-error" class="form-error" role="alert"></p>
       </form>
-      <p class="demo-note"><span></span> Synthetic data environment · Phase 3</p>
+      <p class="demo-note"><span></span> Synthetic data environment · Phase 4</p>
     </main>
   </section>
 
@@ -33,6 +33,7 @@
         <button class="nav-item" data-view="appointments"><span aria-hidden="true">◷</span> Appointments</button>
         <button class="nav-item" data-view="patients"><span aria-hidden="true">◎</span> Patients</button>
         <button class="nav-item" data-view="recalls"><span aria-hidden="true">↗</span> Recall queue</button>
+        <button class="nav-item" data-view="automation"><span aria-hidden="true">✓</span> Automation</button>
       </nav>
       <div class="sidebar-foot"><span class="status-dot"></span><div><strong>API connected</strong><small id="clinic-zone"></small></div></div>
     </aside>
@@ -73,6 +74,11 @@
       <section id="recalls" class="view" aria-labelledby="recalls-heading" hidden>
         <div class="section-heading"><div><p class="eyebrow">CONTINUITY</p><h2 id="recalls-heading">Recall queue</h2><p>Manual follow-up tasks. No messages are sent.</p></div><button class="primary writer-only" data-open="recall">+ Add recall</button></div>
         <div id="recalls-list" class="stack-list"></div><div id="recalls-empty" class="panel empty" hidden><span>↗</span><h3>Recall queue is clear</h3><p>Create a task when a patient needs follow-up.</p></div>
+      </section>
+      <section id="automation" class="view" aria-labelledby="automation-heading" hidden>
+        <div class="section-heading"><div><p class="eyebrow">HUMAN CONTROL</p><h2 id="automation-heading">Recall automation</h2><p>Fixed template drafts · Explicit approval · Mock delivery only</p></div></div>
+        <div class="notice">No real messages are sent. Review the exact text before approving. Consent and source records are checked again at execution.</div>
+        <div id="automation-list" class="stack-list"></div>
       </section>
       <footer>Northstar synthetic operations reference · No clinical decisions</footer>
     </main>

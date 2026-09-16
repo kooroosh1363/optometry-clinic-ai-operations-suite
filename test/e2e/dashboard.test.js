@@ -17,7 +17,7 @@ async function fixture() {
   await pool.query("INSERT INTO staff(clinic_id,id,display_name,role) VALUES ($1,$2,'Maya Reception','receptionist')", [ids.clinic_id, reception]);
   return { ...ids, reception, writer: await issueToken(pool, ids.clinic_id, reception), reader: await issueToken(pool, ids.clinic_id, ids.practitioner_id) };
 }
-async function cleanup(ids) { for (const table of ['audit_events','recalls','appointments','access_tokens','patients','staff']) await pool.query(`DELETE FROM ${table} WHERE clinic_id=$1`, [ids.clinic_id]); await pool.query('DELETE FROM clinics WHERE id=$1', [ids.clinic_id]); }
+async function cleanup(ids) { for (const table of ['mock_delivery_receipts','automation_drafts','consent_events','audit_events','recalls','appointments','access_tokens','patients','staff']) await pool.query(`DELETE FROM ${table} WHERE clinic_id=$1`, [ids.clinic_id]); await pool.query('DELETE FROM clinics WHERE id=$1', [ids.clinic_id]); }
 async function connect(page, token) { await page.goto('/dashboard'); await page.getByLabel('Operator-issued credential').fill(token); await page.getByRole('button', { name: /Connect to clinic/ }).click(); await expect(page.getByText('Today at a glance')).toBeVisible(); }
 function assertNoPersistence(value) { expect(value.local).toEqual([]); expect(value.session).toEqual([]); expect(value.cookie).toBe(''); expect(value.url).not.toContain('Bearer'); }
 
@@ -43,4 +43,32 @@ test('invalid credential and sign-out clear session without persistence', async 
 });
 test('dashboard has no serious accessibility violations and works at mobile width', async ({ page }) => {
   const f = await fixture(); try { await page.setViewportSize({ width: 390, height: 844 }); await connect(page, f.writer.token); const results = await new AxeBuilder({ page }).analyze(); expect(results.violations.filter(v => ['critical','serious'].includes(v.impact))).toEqual([]); await expect(page.getByRole('button', { name: 'Open navigation' })).toBeVisible(); await page.getByRole('button', { name: 'Open navigation' }).click(); await expect(page.getByRole('button', { name: 'Patients' })).toBeVisible(); } finally { await cleanup(f); }
+});
+
+test('administrator records consent and reviews an immutable draft before mock delivery', async ({ page }) => {
+  const f=await fixture();
+  const admin=await issueToken(pool,f.clinic_id,f.administrator_id);
+  await pool.query("UPDATE patients SET contact_email='demo@example.invalid' WHERE clinic_id=$1",[f.clinic_id]);
+  await pool.query("INSERT INTO recalls(clinic_id,id,patient_id,due_date) VALUES($1,$2,$3,'2030-03-01')",[f.clinic_id,randomUUID(),f.patient_id]);
+  page.on('dialog',dialog=>dialog.accept());
+  try {
+    await connect(page,admin.token);
+    await page.getByRole('button',{name:'Patients',exact:true}).click();
+    await page.getByRole('button',{name:'Record demo consent'}).click();
+    await expect(page.getByText('Messaging consent recorded',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Recall queue',exact:true}).click();
+    await page.getByRole('button',{name:'Generate draft'}).click();
+    await expect(page.getByRole('status').filter({hasText:'Operation recorded.'})).toBeVisible();
+    await page.getByRole('button',{name:'Automation',exact:true}).click();
+    await expect(page.locator('#automation blockquote')).toContainText('2030-03-01');
+    await expect(page.getByRole('button',{name:'Simulate delivery'})).toHaveCount(0);
+    await page.getByRole('button',{name:'Approve exact draft'}).click();
+    await page.getByRole('button',{name:'Simulate delivery'}).click();
+    await expect(page.getByText('Mock receipt recorded. No real message was sent.')).toBeVisible();
+    await expect(page.getByRole('button',{name:'Simulate delivery'})).toHaveCount(0);
+    const results=await new AxeBuilder({page}).analyze();
+    expect(results.violations.filter(v=>['critical','serious'].includes(v.impact))).toEqual([]);
+    await page.setViewportSize({width:390,height:844});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  } finally { await cleanup(f); }
 });
