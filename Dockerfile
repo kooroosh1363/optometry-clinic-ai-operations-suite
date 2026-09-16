@@ -4,6 +4,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY src ./src
 COPY db ./db
+COPY public ./public
 ENV HOST=0.0.0.0
 USER node
 EXPOSE 4000

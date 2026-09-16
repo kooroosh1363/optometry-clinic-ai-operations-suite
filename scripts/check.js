@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 function walk(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(`${dir}/${e.name}`) : [`${dir}/${e.name}`]);
 }
-for (const file of ['src', 'test', 'scripts'].flatMap(walk).filter(f => f.endsWith('.js'))) {
+for (const file of ['src', 'public', 'test', 'scripts'].flatMap(walk).filter(f => f.endsWith('.js'))) {
   const r = spawnSync(process.execPath, ['--check', file], { stdio: 'inherit' });
   if (r.status !== 0) process.exit(1);
 }

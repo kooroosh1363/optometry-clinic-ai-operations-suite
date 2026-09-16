@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Synthetic optometry clinic operations dashboard">
+  <title>Northstar Optometry Operations</title>
+  <link rel="icon" href="/assets/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <a class="skip" href="#workspace">Skip to workspace</a>
+  <section id="connect-view" class="connect-shell" aria-labelledby="connect-title">
+    <div class="connect-art" aria-hidden="true"><div class="orbit orbit-a"></div><div class="orbit orbit-b"></div><div class="focus-eye"><span></span></div></div>
+    <main class="connect-card">
+      <div class="brand"><img src="/assets/mark.svg" alt=""><span>Northstar</span></div>
+      <p class="eyebrow">OPTOMETRY OPERATIONS</p><h1 id="connect-title">A clear view of the clinic day.</h1>
+      <p class="lead">Connect with a short-lived local demo credential to manage synthetic appointments, patients and recall work.</p>
+      <form id="connect-form" novalidate>
+        <label for="token">Operator-issued credential</label>
+        <div class="token-row"><input id="token" name="token" type="password" autocomplete="off" spellcheck="false" required aria-describedby="token-help"><button type="button" id="reveal-token" class="icon-button" aria-label="Show credential">Show</button></div>
+        <p id="token-help" class="field-help">Held in memory for this tab only. Refreshing clears it.</p>
+        <button class="primary wide" type="submit">Connect to clinic <span aria-hidden="true">→</span></button>
+        <p id="connect-error" class="form-error" role="alert"></p>
+      </form>
+      <p class="demo-note"><span></span> Synthetic data environment · Phase 3</p>
+    </main>
+  </section>
+
+  <div id="app-view" class="app-shell" hidden>
+    <aside class="sidebar">
+      <div class="brand inverse"><img src="/assets/mark.svg" alt=""><span>Northstar</span></div>
+      <nav aria-label="Primary navigation">
+        <button class="nav-item active" data-view="overview"><span aria-hidden="true">⌂</span> Overview</button>
+        <button class="nav-item" data-view="appointments"><span aria-hidden="true">◷</span> Appointments</button>
+        <button class="nav-item" data-view="patients"><span aria-hidden="true">◎</span> Patients</button>
+        <button class="nav-item" data-view="recalls"><span aria-hidden="true">↗</span> Recall queue</button>
+      </nav>
+      <div class="sidebar-foot"><span class="status-dot"></span><div><strong>API connected</strong><small id="clinic-zone"></small></div></div>
+    </aside>
+    <main id="workspace" class="workspace" tabindex="-1">
+      <header class="topbar">
+        <button id="menu" class="menu-button" aria-label="Open navigation" aria-expanded="false">☰</button>
+        <div><p class="eyebrow">CLINIC WORKSPACE</p><h1 id="view-title">Good morning</h1></div>
+        <div class="user-block"><div class="user-meta"><strong id="staff-name"></strong><small id="staff-role"></small></div><span id="avatar" class="avatar" aria-hidden="true"></span><button id="sign-out" class="ghost">Sign out</button></div>
+      </header>
+      <div id="timezone-warning" class="notice" hidden role="status"></div>
+      <div id="global-error" class="notice danger" hidden role="alert"><span></span><button id="retry-load">Retry</button></div>
+      <div id="loading" class="loading" role="status"><span></span>Loading clinic workspace…</div>
+
+      <section id="overview" class="view" aria-labelledby="overview-heading" hidden>
+        <div class="section-heading"><div><p class="eyebrow">LIVE OPERATIONS</p><h2 id="overview-heading">Today at a glance</h2></div><button class="primary writer-only" data-open="appointment">+ New appointment</button></div>
+        <div class="metrics">
+          <article><span class="metric-icon mint">◷</span><div><small>Scheduled</small><strong id="metric-scheduled">0</strong><p>active bookings</p></div></article>
+          <article><span class="metric-icon blue">◎</span><div><small>Patients</small><strong id="metric-patients">0</strong><p>in this clinic</p></div></article>
+          <article><span class="metric-icon amber">↗</span><div><small>Recall queue</small><strong id="metric-recalls">0</strong><p>pending follow-ups</p></div></article>
+          <article><span class="metric-icon purple">✓</span><div><small>Checked in</small><strong id="metric-checked">0</strong><p>ready for care</p></div></article>
+        </div>
+        <div class="overview-grid">
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">SCHEDULE</p><h3>Appointment flow</h3></div><button class="text-button" data-go="appointments">View all</button></div><div id="overview-appointments"></div></article>
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">FOLLOW-UP</p><h3>Recall priorities</h3></div><button class="text-button" data-go="recalls">View queue</button></div><div id="overview-recalls"></div></article>
+        </div>
+      </section>
+
+      <section id="appointments" class="view" aria-labelledby="appointments-heading" hidden>
+        <div class="section-heading"><div><p class="eyebrow">SCHEDULE</p><h2 id="appointments-heading">Appointments</h2><p>All clinic bookings returned by the API.</p></div><button class="primary writer-only" data-open="appointment">+ Book appointment</button></div>
+        <div class="panel table-wrap"><table><thead><tr><th>Patient</th><th>Time</th><th>Practitioner</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="appointments-body"></tbody></table><div id="appointments-empty" class="empty" hidden><span>◷</span><h3>No appointments yet</h3><p>Book the first synthetic appointment for this clinic.</p></div></div>
+      </section>
+
+      <section id="patients" class="view" aria-labelledby="patients-heading" hidden>
+        <div class="section-heading"><div><p class="eyebrow">DIRECTORY</p><h2 id="patients-heading">Patients</h2><p>Administrative records for the connected clinic.</p></div><button class="primary writer-only" data-open="patient">+ Add patient</button></div>
+        <div id="patients-grid" class="card-grid"></div><div id="patients-empty" class="panel empty" hidden><span>◎</span><h3>No patients yet</h3><p>Add a synthetic patient to begin.</p></div>
+      </section>
+
+      <section id="recalls" class="view" aria-labelledby="recalls-heading" hidden>
+        <div class="section-heading"><div><p class="eyebrow">CONTINUITY</p><h2 id="recalls-heading">Recall queue</h2><p>Manual follow-up tasks. No messages are sent.</p></div><button class="primary writer-only" data-open="recall">+ Add recall</button></div>
+        <div id="recalls-list" class="stack-list"></div><div id="recalls-empty" class="panel empty" hidden><span>↗</span><h3>Recall queue is clear</h3><p>Create a task when a patient needs follow-up.</p></div>
+      </section>
+      <footer>Northstar synthetic operations reference · No clinical decisions</footer>
+    </main>
+  </div>
+
+  <div id="modal-backdrop" class="modal-backdrop" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-head"><div><p class="eyebrow">NEW RECORD</p><h2 id="modal-title"></h2></div><button id="close-modal" class="icon-button" aria-label="Close dialog">×</button></div>
+      <form id="record-form" novalidate><div id="form-fields"></div><p id="form-error" class="form-error" role="alert"></p><div class="modal-actions"><button type="button" id="cancel-modal" class="ghost">Cancel</button><button id="save-record" type="submit" class="primary">Save</button></div></form>
+    </section>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="/assets/app.js"></script>
+</body></html>

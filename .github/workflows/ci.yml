@@ -35,7 +35,17 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run test:integration
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
       - run: npm audit --omit=dev --audit-level=high
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
   containers:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -46,6 +56,8 @@ jobs:
       - run: docker compose config --quiet
       - run: docker compose up --build --wait --wait-timeout 120
       - run: curl --fail http://127.0.0.1:4000/health/ready
+      - run: curl --fail http://127.0.0.1:4000/dashboard
+      - run: curl --fail http://127.0.0.1:4000/assets/app.js
       - name: Business routes require authentication
         run: test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4000/v1/patients)" = 401
       - name: Operator can provision a synthetic clinic

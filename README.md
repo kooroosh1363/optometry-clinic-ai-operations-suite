@@ -2,13 +2,13 @@
 
 Human-controlled optometry operations reference project, built in six reviewable phases.
 
-**Status: Phase 2 administrative API. Not a deployed clinic product, medical device, or real client engagement. Use synthetic data only.**
+**Status: Phase 3 operations dashboard. Not a deployed clinic product, medical device, or real client engagement. Use synthetic data only.**
 
 ## Available now
 
-Node.js health service and authenticated administrative API, PostgreSQL migrations, clinic-scoped records, patient creation, appointment booking/rescheduling/status transitions, recall tracking, version-checked updates, audit metadata, tests and Docker Compose setup.
+Responsive operations dashboard plus the authenticated Node.js administrative API, PostgreSQL migrations, clinic-scoped records, patient creation, appointment booking/rescheduling/status transitions, recall tracking, version-checked updates, audit metadata, browser tests and Docker Compose setup.
 
-Authentication uses short-lived opaque bearer tokens issued/revoked by a trusted operator CLI. No password login, SSO, MFA, dashboard, AI agent, clinical API or message delivery is implemented. See the [Phase 2 contract](docs/PHASE_2_CONTRACT.md) and [API guide](docs/API.md).
+Authentication uses short-lived opaque bearer tokens issued/revoked by a trusted operator CLI. The dashboard keeps the credential in memory and clears it on refresh/sign-out. No password login, SSO, MFA, AI agent, clinical API or message delivery is implemented. See the [dashboard contract](docs/PHASE_3_CONTRACT.md) and [API guide](docs/API.md).
 
 ## Run locally
 
@@ -49,12 +49,16 @@ docker compose exec -T api node src/operator.js revoke TOKEN_ID
 
 Use `Authorization: Bearer TOKEN` in an API client to call `GET /v1/me`. Full request examples and role rules are in [API.md](docs/API.md). Each `demo` command creates a new isolated synthetic clinic; it does not reset existing data.
 
+Open `http://127.0.0.1:4000/dashboard`, paste the issued secret credential, and connect. The dashboard shows only records returned by the API. Refresh/sign-out clears the credential, so issue another only if the original has expired or been revoked. Optometrists receive a read-only workspace; administrators and receptionists receive the Phase 2 write controls.
+
 ## Verify
 
 ```sh
 npm run check
 npm test
 TEST_DATABASE_URL='postgres://USER:PASSWORD@localhost:5432/DISPOSABLE_TEST_DB' npm run test:integration
+npx playwright install chromium
+TEST_DATABASE_URL='postgres://USER:PASSWORD@localhost:5432/DISPOSABLE_TEST_DB' npm run test:e2e
 npm audit --omit=dev --audit-level=high
 ```
 
@@ -67,6 +71,7 @@ Integration tests require a disposable PostgreSQL database and fail when unconfi
 - [Data model](docs/DATA_MODEL.md)
 - [Security boundaries](docs/SECURITY.md)
 - [Six-phase roadmap](docs/ROADMAP.md)
+- [Dashboard acceptance contract](docs/PHASE_3_CONTRACT.md)
 - [Continuation checkpoint](docs/HANDOFF.md)
 
 Each phase is delivered through a separate pull request. Merge requires the repository owner's explicit instruction. Production readiness is a future assessment, not a claim made by this repository.
