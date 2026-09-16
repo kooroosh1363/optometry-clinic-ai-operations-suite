@@ -3,5 +3,7 @@ node_modules
 .env
 .env.*
 coverage
+playwright-report
+test-results
 tmp
 *.log

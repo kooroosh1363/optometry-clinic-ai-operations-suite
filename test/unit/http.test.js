@@ -21,7 +21,7 @@ test('database errors are sanitized', async t => {
   const r = await request(t, async () => { throw new Error('password: PRIVATE'); }, '/health/ready');
   assert.equal(r.status, 503); assert.deepEqual(await r.json(), {status:'not_ready'});
 });
-for (const path of ['/patients', '/appointments', '/', '/admin', '/health/ready?x=1']) {
+for (const path of ['/patients', '/appointments', '/legacy', '/admin', '/health/ready?x=1']) {
   test(`no accidental route ${path}`, async t => assert.equal((await request(t, async () => true, path)).status,404));
 }
 for (const method of ['POST', 'PUT', 'DELETE']) {

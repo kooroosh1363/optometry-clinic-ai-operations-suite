@@ -29,3 +29,9 @@ Use random, hashed-at-rest bearer tokens with bounded expiry and revocation to a
 ## ADR 007: Transactional authorization and updates
 
 Authenticated requests use database transactions. Shared token/staff locks keep authorization stable during a request; revocation takes effect after preceding authorized requests finish. Update routes lock their tenant-scoped record, check the supplied version and lifecycle rules, then update and append audit metadata atomically. Overlap violations map to HTTP 409. Deadlock/serialization failures return retry_request; clients must read current state before deciding to retry. Business mutations are not automatically retried.
+
+## ADR 008: Same-origin framework-free dashboard
+
+Serve small HTML, CSS, JavaScript and SVG assets from the API process. The dashboard has no runtime CDN, analytics, build step or third-party browser dependency. This keeps the demonstration reproducible and removes cross-origin credential handling. The server uses an explicit file map rather than arbitrary filesystem paths. Browser text from API records is assigned through DOM text properties.
+
+The operator credential exists only in module memory. Refresh and sign-out clear it. This deliberately trades persistence for a smaller demonstration attack surface. A production identity/browser session design remains separate work. The dashboard reads up to 100 records per collection because the Phase 2 API has bounded offset pagination but no filters/cursors; larger-clinic navigation remains a documented product gap.

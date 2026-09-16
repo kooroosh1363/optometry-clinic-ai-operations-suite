@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Northstar Optometry mark">
+  <rect width="48" height="48" rx="14" fill="#12372f"/>
+  <path d="M9 24c4.2-7 9.2-10.5 15-10.5S34.8 17 39 24c-4.2 7-9.2 10.5-15 10.5S13.2 31 9 24Z" fill="none" stroke="#d8f3e8" stroke-width="3"/>
+  <circle cx="24" cy="24" r="6" fill="#79d6bb"/><circle cx="24" cy="24" r="2.5" fill="#12372f"/>
+</svg>

@@ -8,4 +8,8 @@
 
 CI runs both suites, syntax checks, and dependency audit, plus a separate Docker Compose smoke job that starts the stack, checks readiness, stops PostgreSQL, and checks readiness 503 versus liveness 200. Container smoke checks are not included in the Node test count.
 
-Concurrent HTTP tests race overlapping bookings and same-version updates through separate database connections. These are targeted concurrency checks, not load/stress testing. No browser tests, penetration tests, full coverage target or AI evaluations are claimed. Container CI also checks unauthenticated access rejection and synthetic operator provisioning. A green run is evidence for tested behavior, not proof of no bugs. Inspect checks for the latest PR commit before merging.
+Concurrent HTTP tests race overlapping bookings and same-version updates through separate database connections. These are targeted concurrency checks, not load/stress testing.
+
+`npm run test:e2e` uses Chromium against the real Node service and disposable PostgreSQL. It covers receptionist creation/transition flows, real API rendering, read-only role behavior, invalid credential, sign-out and absence of persistent token storage, serious/critical automated accessibility findings, and navigation at a 390-pixel viewport. Automated accessibility scanning and keyboard-focused implementation do not replace assistive-technology user testing. Visual review covers the connection screen and populated dashboard at desktop/mobile widths.
+
+No cross-browser matrix, visual-regression baseline, load test, penetration test, full coverage target or AI evaluation is claimed. Container CI also checks dashboard assets, API rejection, operator provisioning and dependency outage behavior. A green run is evidence for tested behavior, not proof of no bugs. Inspect checks for the latest PR commit before merging.
