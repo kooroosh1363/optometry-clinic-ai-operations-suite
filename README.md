@@ -2,7 +2,7 @@
 
 Human-controlled optometry operations reference project, built in six reviewable phases.
 
-**Status: Phase 3 operations dashboard. Not a deployed clinic product, medical device, or real client engagement. Use synthetic data only.**
+**Status: Phase 4 controlled recall automation and dashboard. Not a deployed clinic product, medical device, or real client engagement. Use synthetic data only.**
 
 ## Available now
 

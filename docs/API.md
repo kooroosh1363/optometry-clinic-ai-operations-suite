@@ -35,7 +35,7 @@ Local synthetic demonstration only. Base URL: `http://127.0.0.1:4000`. Health ro
 | POST /v1/recalls | Administrator/receptionist | patient_id, due_date |
 | PATCH /v1/recalls/ID | Administrator/receptionist | version, status |
 
-Optometrist is read-only for these administrative routes. Patient edits, deletion, clinical records, role management and consent grants have no HTTP endpoint. Staff/clinic administration is a trusted operator task. Tokens default to 8 hours, maximum 24; revocation uses the non-secret token ID.
+Optometrist is read-only for these administrative routes. General patient edits, deletion, clinical records and role management have no HTTP endpoint. Phase 4 consent changes use the dedicated administrator-only endpoint above. Staff/clinic administration is a trusted operator task. Tokens default to 8 hours, maximum 24; revocation uses the non-secret token ID.
 
 ## Request/response contract
 
