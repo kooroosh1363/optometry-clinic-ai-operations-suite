@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { automation, mockDelivery } from './automation.js';
 import { authenticate, requireWriter } from './auth.js';
 import { ApiError, invalid, object, uuid, name, interval, version, timezone, dateOnly, pagination } from './validation.js';
 
@@ -8,7 +9,7 @@ const transitions = {
   completed: [], cancelled: [], no_show: []
 };
 const recallTransitions = { pending: ['contacted', 'closed'], contacted: ['closed'], closed: [] };
-const patientColumns = 'id,display_name,contact_email,messaging_consent,created_at';
+const patientColumns = 'id,display_name,contact_email,messaging_consent,consent_version,created_at';
 const appointmentColumns = 'id,patient_id,practitioner_id,starts_at,ends_at,status,version';
 const recallColumns = 'id,patient_id,due_date::text,status,version,created_at';
 
@@ -41,7 +42,9 @@ async function practitioner(c, clinic, id) {
   const r = await c.query("SELECT id FROM staff WHERE clinic_id=$1 AND id=$2 AND role='optometrist' AND active FOR SHARE", [clinic, uuid(id)]);
   if (!r.rowCount) throw new ApiError(400, 'invalid_reference');
 }
-async function dispatch(c, actor, req, url, input) {
+async function dispatch(c, actor, req, url, input, deliver) {
+  const automated = await automation(c, actor, req, url, input, deliver);
+  if (automated) return automated;
   const path = url.pathname, method = req.method;
   const match = /^\/v1\/(patients|appointments|recalls)(?:\/([0-9a-f-]+))?$/.exec(path);
   if (path === '/v1/me' && method === 'GET') return { data: actor };
@@ -121,7 +124,7 @@ async function dispatch(c, actor, req, url, input) {
   return { data: r.rows[0] };
 }
 
-export function createApi(pool) {
+export function createApi(pool, { deliver = mockDelivery } = {}) {
   return async (req, res, send) => {
     let c;
     try {
@@ -133,7 +136,7 @@ export function createApi(pool) {
       await c.query('BEGIN');
       const actor = await authenticate(c, req.headers.authorization);
       try { timezone(actor.timezone); } catch { throw new ApiError(409, 'clinic_configuration_invalid'); }
-      const output = await dispatch(c, actor, req, url, input);
+      const output = await dispatch(c, actor, req, url, input, deliver);
       await c.query('COMMIT');
       send(req.method === 'POST' ? 201 : 200, output);
     } catch (error) {

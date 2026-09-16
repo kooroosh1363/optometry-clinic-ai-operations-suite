@@ -1,5 +1,11 @@
 # Architecture decisions
 
+## ADR 009: Controlled recall automation with a transactional mock
+
+`src/automation.js` owns consent, immutable template drafts, approval, source revalidation and execution. `src/api.js` supplies the authenticated actor and transaction. Migration 003 preserves 001/002 and adds consent history, drafts and receipts. Request-key advisory locks serialize retries; source-version uniqueness prevents different keys from creating duplicate drafts. Draft row locks serialize approval/execution. Recall/patient shared locks order execution against updates and consent revocation.
+
+The generator is a fixed administrative template, not an LLM. No arbitrary prompt, clinical content or model authority enters the workflow. The mock adapter writes a unique receipt inside the same transaction as state/audit. A savepoint removes partial writes on a recognized adapter failure; unexpected errors roll back everything. This is not a network-provider interface: real delivery needs an outbox, provider keys and reconciliation. Separate author/approver, legal consent collection and production readiness are not claimed.
+
 ## ADR 001: Small modular monolith
 
 Use Node.js 24 with its HTTP and test libraries and the PostgreSQL driver. Configuration, HTTP routing, database access, and migrations have separate modules. This keeps the foundation inspectable; a larger API framework can be evaluated when authenticated business routes arrive. No UI framework decision is implied here.

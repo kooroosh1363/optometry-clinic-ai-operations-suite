@@ -7,3 +7,4 @@
 @media(forced-colors:active){.badge,.metric-icon,.patient-initials{border:1px solid CanvasText}.status-dot{forced-color-adjust:none}}
 [hidden]{display:none!important}
 :root{--muted:#526a64}.eyebrow{color:#256454}footer{color:#526a64}
+.automation-card{padding:24px;overflow-wrap:anywhere}.automation-card blockquote{margin:18px 0;padding:16px;border-left:3px solid #256454;background:#f0f5f2;line-height:1.6}.automation-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px}.recall-card{flex-wrap:wrap}

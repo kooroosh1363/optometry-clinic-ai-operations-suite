@@ -1,5 +1,7 @@
 # Verification strategy
 
+Phase 4 adds real PostgreSQL/HTTP tests for consent/history/versioning, missing consent/contact, stale sources, tenant/role boundaries, same/different request-key races, forbidden execution, terminal rejection, revocation/regrant, concurrent mock delivery and replay, partial failure rollback, explicit retry/exhaustion, unexpected failure rollback, and migration 003 checksums. Browser tests exercise consent -> draft -> approval -> mock receipt and check accessibility and mobile overflow. These targeted checks are not a penetration test, compliance audit or guarantee of zero bugs. CI logs are authoritative for each head.
+
 `npm run check` performs JavaScript syntax validation and checks roadmap headings. It is not a linter or a type checker.
 
 `npm test` runs unit/HTTP contract tests using Node's built-in runner: valid/invalid configuration, dependency-independent liveness, readiness success/failure, error sanitization, unavailable business routes, unsupported methods, and headers. HTTP tests use real local sockets with a substituted readiness function, not a real database.

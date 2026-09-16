@@ -1,8 +1,13 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
-const state = { token: '', me: null, patients: [], staff: [], appointments: [], recalls: [], view: 'overview', modal: null };
-const titles = { overview: 'Good morning', appointments: 'Appointment schedule', patients: 'Patient directory', recalls: 'Recall queue' };
+const state = { token: '', me: null, patients: [], staff: [], appointments: [], recalls: [], automation: [], view: 'overview', modal: null };
+const titles = { overview: 'Good morning', appointments: 'Appointment schedule', patients: 'Patient directory', recalls: 'Recall queue', automation: 'Controlled automation' };
 const errorText = {
+  consent_required: 'Messaging consent is missing or revoked.', contact_required: 'A contact email is required.',
+  source_changed: 'Consent or recall details changed. This draft can no longer be approved or executed.',
+  draft_exists: 'A draft already exists for this recall and consent revision. Open Automation to review it.',
+  idempotency_conflict: 'This request key belongs to a different recall.', approval_required: 'Explicit approval is required before execution.',
+  retry_exhausted: 'The three-attempt limit has been reached. Operator review is required.',
   unauthorized: 'This credential is invalid, expired or revoked. Connect again with a current credential.', forbidden: 'Your role has read-only access to this operation.',
   appointment_overlap: 'That time conflicts with an active patient or practitioner booking.', version_conflict: 'This record changed in another session. The workspace has been refreshed.',
   invalid_transition: 'That status change is no longer allowed.', invalid_reference: 'A selected patient or practitioner is no longer available.',
@@ -48,7 +53,7 @@ async function connect(token) {
   }
 }
 function logout(reason = '') {
-  state.token = ''; state.me = null; state.patients = []; state.staff = []; state.appointments = []; state.recalls = [];
+  state.token = ''; state.me = null; state.patients = []; state.staff = []; state.appointments = []; state.recalls = []; state.automation = [];
   $('#app-view').hidden = true; $('#connect-view').hidden = false; $('#token').value = ''; $('#timezone-warning').hidden = true;
   if (reason) $('#connect-error').textContent = reason;
   $('#token').focus();
@@ -56,7 +61,8 @@ function logout(reason = '') {
 async function loadAll() {
   $('#loading').hidden = false; $('#global-error').hidden = true; $$('.view').forEach(v => v.hidden = true);
   try {
-    const [patients, staff, appointments, recalls] = await Promise.all(['/v1/patients?limit=100', '/v1/staff?limit=100', '/v1/appointments?limit=100', '/v1/recalls?limit=100'].map(api));
+    const [patients, staff, appointments, recalls, automation] = await Promise.all(['/v1/patients?limit=100', '/v1/staff?limit=100', '/v1/appointments?limit=100', '/v1/recalls?limit=100', '/v1/automation?limit=100'].map(path => api(path)));
+    state.automation = automation.data;
     state.patients = patients.data; state.staff = staff.data; state.appointments = appointments.data; state.recalls = recalls.data;
     render(); $('#loading').hidden = true; showView(state.view);
   } catch (error) {
@@ -70,7 +76,7 @@ function render() {
   $('#metric-patients').textContent = state.patients.length;
   $('#metric-recalls').textContent = state.recalls.filter(r => r.status === 'pending').length;
   $('#metric-checked').textContent = state.appointments.filter(a => a.status === 'checked_in').length;
-  renderOverview(); renderAppointments(); renderPatients(); renderRecalls();
+  renderOverview(); renderAppointments(); renderPatients(); renderRecalls(); renderAutomation();
 }
 function renderOverview() {
   const appointments = $('#overview-appointments'); clear(appointments);
@@ -101,7 +107,18 @@ function renderAppointments() {
 }
 function renderPatients() {
   const grid = $('#patients-grid'); clear(grid); $('#patients-empty').hidden = state.patients.length > 0;
-  state.patients.forEach(item => { const card = el('article', 'patient-card'), icon = el('span', 'patient-initials', initials(item.display_name)), info = el('div'); info.append(el('strong', '', item.display_name), el('small', '', item.contact_email || 'No contact email'), el('small', '', item.messaging_consent ? 'Messaging consent recorded' : 'No messaging consent')); card.append(icon, info); grid.append(card); });
+  state.patients.forEach(item => {
+    const card = el('article', 'patient-card'), icon = el('span', 'patient-initials', initials(item.display_name)), info = el('div');
+    info.append(el('strong', '', item.display_name), el('small', '', item.contact_email || 'No contact email'), el('small', '', item.messaging_consent ? 'Messaging consent recorded' : 'No messaging consent'));
+    if (state.me.role === 'administrator') {
+      const button = el('button', 'ghost', item.messaging_consent ? 'Revoke demo consent' : 'Record demo consent');
+      button.addEventListener('click', () => {
+        if (confirm(`${item.messaging_consent ? 'Revoke' : 'Record'} synthetic messaging consent for ${item.display_name}? This is a demo record, not legal consent evidence.`))
+          automationMutation(button, `/v1/patients/${item.id}/consent`, { version: item.consent_version, granted: !item.messaging_consent }, 'PATCH');
+      }); info.append(button);
+    }
+    card.append(icon, info); grid.append(card);
+  });
 }
 function renderRecalls() {
   const list = $('#recalls-list'); clear(list); $('#recalls-empty').hidden = state.recalls.length > 0;
@@ -109,8 +126,48 @@ function renderRecalls() {
     const card = el('article', 'recall-card'), info = el('div'); info.append(el('strong', '', person(item.patient_id)), el('small', '', `Due ${item.due_date} · manual follow-up`)); card.append(info, statusBadge(item.status));
     const allowed = item.status === 'pending' ? ['contacted', 'closed'] : item.status === 'contacted' ? ['closed'] : [];
     if (allowed.length && state.me.role !== 'optometrist') { const select = el('select', 'action-select'); select.setAttribute('aria-label', `Change recall status for ${person(item.patient_id)}`); select.append(new Option('Update…', '')); allowed.forEach(value => select.append(new Option(value, value))); select.addEventListener('change', () => updateStatus('recalls', item, select.value)); card.append(select); }
+    if (item.status === 'pending' && state.me.role !== 'optometrist') {
+      const button = el('button', 'ghost', 'Generate draft');
+      const requestKey = crypto.randomUUID();
+      button.addEventListener('click', () => automationMutation(button, '/v1/automation', { recall_id: item.id, request_key: requestKey })); card.append(button);
+    }
     list.append(card);
   });
+}
+function renderAutomation() {
+  const list = $('#automation-list'); clear(list);
+  if (!state.automation.length) list.append(emptyInline('Generate a draft from a pending recall to begin.'));
+  state.automation.forEach(item => {
+    const card = el('article', 'panel automation-card');
+    card.append(el('h3', '', person(item.patient_id)), statusBadge(item.status), el('p', '', `Recipient: ${item.recipient}`), el('blockquote', '', item.content), el('small', '', `Template: ${item.generator} · Attempts: ${item.attempts}/3 · Revision: ${item.version}`));
+    if (item.approved_at) card.append(el('p', '', `Approved ${formatInstant(item.approved_at)}`));
+    if (item.last_error) card.append(el('p', '', 'Mock delivery failed. An explicit retry is required.'));
+    if (item.status === 'simulated') card.append(el('p', '', 'Mock receipt recorded. No real message was sent.'));
+    if (state.me.role !== 'optometrist') {
+      const actions = item.status === 'draft' ? [['approve','Approve exact draft'],['reject','Reject draft']] : ['approved','failed'].includes(item.status) && item.attempts < 3 ? [['execute',item.status === 'failed' ? 'Retry mock delivery' : 'Simulate delivery']] : [];
+      const controls = el('div', 'automation-actions');
+      actions.forEach(([action,label]) => {
+        const button = el('button', 'ghost', label);
+        button.addEventListener('click', () => {
+          if (action === 'approve' && !confirm('Approve this exact draft and recipient for simulated delivery?')) return;
+          automationMutation(button, `/v1/automation/${item.id}/${action}`, {version:item.version});
+        }); controls.append(button);
+      }); card.append(controls);
+    }
+    list.append(card);
+  });
+}
+async function automationMutation(button, path, data, method = 'POST') {
+  button.disabled = true;
+  try {
+    const result = await api(path, {method, body:JSON.stringify(data)});
+    showToast(result.data?.status === 'failed' ? 'Mock delivery failed. Review before retrying.' : 'Operation recorded. No real message sent.');
+    await loadAll();
+  } catch (error) {
+    showToast(message(error.code,error.message),true);
+    if (error.status === 401) logout(message('unauthorized'));
+    else if (error.status === 409) await loadAll();
+  } finally { button.disabled = false; }
 }
 async function updateStatus(collection, item, status) {
   if (!status) return;

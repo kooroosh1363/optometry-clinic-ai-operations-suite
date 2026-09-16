@@ -14,7 +14,7 @@ export function createApp({ ready, api }) {
     if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return send(405, { error: 'method_not_allowed' }); }
     if (req.url === '/health/live') return send(200, { status: 'alive', phase: 'administrative_api' });
     try {
-      if (await ready()) return send(200, { status: 'ready', schema: '002' });
+      if (await ready()) return send(200, { status: 'ready', schema: '003' });
     } catch { /* Dependency errors must not expose URLs, passwords or SQL. */ }
     return send(503, { status: 'not_ready' });
   });

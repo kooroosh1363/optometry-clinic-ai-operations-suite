@@ -29,10 +29,11 @@ export const migrationSql = () => readFile(new URL('../db/migrations/001_foundat
 export async function migrateAll(pool) {
   await migrate(pool, await migrationSql());
   await migrate(pool, await readFile(new URL('../db/migrations/002_administrative_api.sql', import.meta.url), 'utf8'), '002');
+  await migrate(pool, await readFile(new URL('../db/migrations/003_controlled_automation.sql', import.meta.url), 'utf8'), '003');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const pool = createPool(config().databaseUrl);
-  try { await migrateAll(pool); console.log('schema_002_ready'); }
+  try { await migrateAll(pool); console.log('schema_003_ready'); }
   catch { console.error('migration_failed'); process.exitCode = 1; }
   finally { await pool.end(); }
 }

@@ -13,7 +13,9 @@
 
 All identifiers are UUIDs supplied by the caller. Appointment foreign keys include clinic_id. Intervals use `timestamptz` and half-open ranges `[start, end)`, so adjacent bookings are allowed. Ends must be later than starts. Scheduled and checked-in appointments block both practitioner and patient overlap; cancelled, completed and no-show records do not reserve a slot.
 
-Migration 002 adds the three new tables and staff.active (existing staff default to true). Migration 001 remains unchanged. The runner applies both versions in order and rejects checksum changes. Readiness requires exactly 001 and 002.
+Migration 002 adds the three new tables and staff.active (existing staff default to true). Migration 003 adds patient consent_version, consent_events, automation_drafts and mock_delivery_receipts, and expands the audit vocabulary. Migrations 001/002 remain unchanged. The runner applies all three versions in order and rejects checksum changes. Readiness requires exactly 001, 002 and 003.
+
+Drafts snapshot source/consent versions and recipient; unique clinic/request-key and clinic/recall/version/consent-version constraints prevent duplicate creation. Mock receipts have a primary key on clinic/draft. Transactions lock the draft and source while approving/executing and commit the receipt, attempt count and audit together. Consent history records the actor, boolean decision, version and timestamp. These ordinary tables are not immutable compliance records.
 
 Consent defaults to false and cannot be granted through this API; source, time, scope and withdrawal handling must be added before delivery. Email syntax is checked but ownership/deliverability is not. Phase 2 validates supported IANA-style clinic timezone labels and requires an active in-clinic optometrist for bookings. These checks are application rules; trusted direct SQL can bypass them.
 

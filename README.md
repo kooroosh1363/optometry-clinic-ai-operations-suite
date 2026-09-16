@@ -2,7 +2,7 @@
 
 Human-controlled optometry operations reference project, built in six reviewable phases.
 
-**Status: Phase 3 operations dashboard. Not a deployed clinic product, medical device, or real client engagement. Use synthetic data only.**
+**Status: Phase 4 controlled recall automation and dashboard. Not a deployed clinic product, medical device, or real client engagement. Use synthetic data only.**
 
 ## Available now
 
@@ -21,7 +21,13 @@ curl --fail http://127.0.0.1:4000/health/ready
 docker compose down
 ```
 
-Compose applies migrations 001 and 002 before starting the API, including when upgrading an existing Phase 1 volume. The database uses a persistent named volume and is not published to the host. `docker compose down` preserves that data. Never use real patient records. The example password is for local development only; use a URL-safe value for this Compose template.
+Compose applies migrations 001 through 003 before starting the API, including when upgrading an existing volume. The database uses a persistent named volume and is not published to the host. `docker compose down` preserves that data. Never use real patient records. The example password is for local development only; use a URL-safe value for this Compose template.
+
+## Controlled recall automation (Phase 4)
+
+Use an administrator credential and a synthetic patient with a contact email. In Patients, record demo consent; in Recall queue, create a pending recall and select Generate draft. Open Automation, review the exact recipient and immutable template text, explicitly approve it, then choose Simulate delivery. A database mock receipt is recorded; **no email/SMS is sent**. Rejection blocks execution. Consent revocation or a changed source blocks an old approval. Receptionists may draft/approve/execute but cannot record consent; optometrists remain read-only.
+
+This is deterministic template automation, not an implemented LLM agent. No external provider or paid service is required. See [Phase 4 contract](docs/PHASE_4_CONTRACT.md), [API](docs/API.md) and [security boundaries](docs/SECURITY.md). Collections currently show the first 100 records; synthetic consent is not legal consent collection.
 
 For Node.js 24 development with a separately available PostgreSQL 16 database:
 

@@ -1,9 +1,11 @@
 # Continuation checkpoint
 
-Phase 1 merged via PR #1. Phase 2 merged via PR #2 at `989a7565cf90244a51a8d9224a4505f91c51d809`. Current milestone: Phase 3 operations dashboard; inspect its PR checks before acceptance. No merge without explicit owner instruction.
+Phases 1/2/3 merged. Phase 3 merge: `b3ff1ffbcf0d5dbd980fb56712a44c1b84f729d5`. Current milestone: Phase 4 controlled recall automation; branch `phase/4-controlled-automation`. No merge without explicit owner instruction.
 
-Implemented through Phase 3: the Phase 2 API plus same-origin responsive dashboard, memory-only credential connection/sign-out, live overview, patient directory, appointment workflow, recall queue, role-aware controls, explicit errors/loading/empty states and real browser/PostgreSQL tests. Exact dashboard scope is in PHASE_3_CONTRACT.md. No password login, SSO, MFA, AI or external delivery yet. Patient edits and consent changes are not exposed.
+Implemented through Phase 4: previous API/dashboard plus administrator synthetic consent/history, immutable template recall drafts, explicit approval/rejection, source/consent rechecks, idempotent database mock receipts, bounded retries and audit metadata, with dashboard actions. Read PHASE_4_CONTRACT.md and API.md. No LLM, external message, legal consent evidence, clinical decision or real client deployment. Author and approver may be the same employee. UI collections retain the first-100 limit.
 
-Next session after authorized Phase 3 merge: Phase 4 controlled automation and agents. Read ROADMAP.md, API.md, SECURITY.md, PHASE_3_CONTRACT.md, git status and latest CI first. Define draft, approval, consent and idempotency states before adding an agent or delivery adapter. Preserve migrations 001/002 and the dashboard trust boundary. Final Persian RTL PDF follows Phase 6 and the final authorized merge.
+Local syntax and 37 unit/HTTP/static tests passed. PostgreSQL, browser and Docker results must be read from the Phase 4 PR's latest CI before acceptance; the local environment has no PostgreSQL/Docker executable. The PR description records authoritative CI results.
+
+Next session after authorized Phase 4 merge: Phase 5 analytics and hardening. Read ROADMAP.md, SECURITY.md, git status and latest CI. Define metric denominators/time ranges and review browser session races, pagination and timezone semantics; do not claim metrics from first-100/all-date overview counts. No unsolicited provider/model connection. Preserve migrations 001/002/003. Final Persian RTL PDF follows Phase 6 and final authorized merge.
 
 Keep one bounded milestone per session to avoid repeated repository-wide rebuilds. Record completed work, test commands/results, open limitations, and next acceptance gates here when handing off. Credit consumption cannot be reliably translated into a fixed number of features or tests.
