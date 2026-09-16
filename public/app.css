@@ -6,3 +6,4 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 @media(forced-colors:active){.badge,.metric-icon,.patient-initials{border:1px solid CanvasText}.status-dot{forced-color-adjust:none}}
 [hidden]{display:none!important}
+:root{--muted:#526a64}.eyebrow{color:#256454}footer{color:#526a64}
