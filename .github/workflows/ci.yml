@@ -37,7 +37,13 @@ jobs:
       - run: npm run test:integration
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-      - run: npm audit --omit=dev --audit-level=high
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-demo-preview
+          path: test-results/demo-preview/*.png
+          if-no-files-found: error
+          retention-days: 14
+      - run: npm audit --audit-level=high
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

@@ -3,6 +3,7 @@ const $$ = selector => [...document.querySelectorAll(selector)];
 const state = { token: '', me: null, patients: [], staff: [], appointments: [], recalls: [], automation: [], view: 'overview', modal: null };
 const titles = { overview: 'Clinic overview', appointments: 'Appointment schedule', patients: 'Patient directory', recalls: 'Recall queue', automation: 'Controlled automation', analytics: 'Management reports' };
 let sessionEpoch = 0, loadSequence = 0, reportSequence = 0;
+let modalSequence = 0, modalOpener = null;
 let sessionController = new AbortController();
 const stale = () => Object.assign(new Error('Obsolete session'), { code: 'stale_session' });
 function newSession() { sessionEpoch++; loadSequence++; reportSequence++; sessionController.abort(); sessionController = new AbortController(); }
@@ -210,6 +211,8 @@ function showView(view) {
 function field(name, label, type = 'text', extra = '') { return `<div class="field"><label for="field-${name}">${label}</label><input id="field-${name}" name="${name}" type="${type}" ${extra} required></div>`; }
 function selectField(name, label, options) { return `<div class="field"><label for="field-${name}">${label}</label><select id="field-${name}" name="${name}" required><option value="">Select…</option>${options.map(o => `<option value="${o.id}"></option>`).join('')}</select></div>`; }
 function openModal(type) {
+  modalSequence++; modalOpener = document.activeElement;
+  $('#save-record').disabled = false; $('#save-record').textContent = 'Save';
   state.modal = type; const fields = $('#form-fields');
   const titlesMap = { patient: 'Add patient', appointment: 'Book appointment', recall: 'Add recall' }; $('#modal-title').textContent = titlesMap[type];
   if (type === 'patient') fields.innerHTML = field('display_name', 'Display name') + field('contact_email', 'Contact email (optional)', 'email', 'required=""');
@@ -219,16 +222,17 @@ function openModal(type) {
   if (type === 'patient') $('#field-contact_email').required = false;
   $('#form-error').textContent = ''; $('#record-form').reset(); $('#modal-backdrop').hidden = false; document.body.style.overflow = 'hidden'; fields.querySelector('input,select').focus();
 }
-function closeModal() { $('#modal-backdrop').hidden = true; document.body.style.overflow = ''; state.modal = null; document.querySelector(`[data-open]`)?.focus(); }
+function closeModal() { modalSequence++; $('#modal-backdrop').hidden = true; document.body.style.overflow = ''; state.modal = null; if (modalOpener?.isConnected) modalOpener.focus(); }
 async function submitRecord(form) {
   const epoch = sessionEpoch;
+  const modal = modalSequence;
   if (!form.reportValidity()) return;
   const values = Object.fromEntries(new FormData(form)); let path = `/v1/${state.modal === 'patient' ? 'patients' : state.modal === 'appointment' ? 'appointments' : 'recalls'}`;
   if (state.modal === 'patient' && !values.contact_email) delete values.contact_email;
   const button = $('#save-record'); button.disabled = true; button.textContent = 'Saving…';
-  try { const savedType = state.modal; await api(path, { method: 'POST', body: JSON.stringify(values) }); closeModal(); showToast(`${savedType === 'patient' ? 'Patient' : savedType === 'appointment' ? 'Appointment' : 'Recall'} saved.`); await loadAll(); }
-  catch (error) { if (error.code === 'stale_session') return; if (error.status === 401) { closeModal(); return logout(message('unauthorized')); } $('#form-error').textContent = message(error.code, error.message); }
-  finally { if (epoch === sessionEpoch) { button.disabled = false; button.textContent = 'Save'; } }
+  try { const savedType = state.modal; await api(path, { method: 'POST', body: JSON.stringify(values) }); if (modal === modalSequence) { closeModal(); showToast(`${savedType === 'patient' ? 'Patient' : savedType === 'appointment' ? 'Appointment' : 'Recall'} saved.`); } await loadAll(); }
+  catch (error) { if (error.code === 'stale_session') return; if (error.status === 401) { closeModal(); return logout(message('unauthorized')); } if (modal === modalSequence) $('#form-error').textContent = message(error.code, error.message); }
+  finally { if (epoch === sessionEpoch && modal === modalSequence) { button.disabled = false; button.textContent = 'Save'; } }
 }
 const percentage = value => value === null ? 'N/A' : new Intl.NumberFormat(undefined,{style:'percent',maximumFractionDigits:1}).format(value);
 async function loadReport() {

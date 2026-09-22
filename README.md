@@ -2,7 +2,11 @@
 
 Human-controlled optometry operations reference project, built in six reviewable phases.
 
-**Status: Phase 5 management reports and session hardening. Not a deployed clinic product, medical device, or real client engagement. Use synthetic data only.**
+**Status: Phase 6 reference-release review. Not a deployed clinic product, medical device, or real client engagement. Use synthetic data only.**
+
+Start with the [demo and recording guide](docs/DEMO_GUIDE.md), [release scope and limitations](docs/RELEASE.md), [technical review Q&A](docs/TECHNICAL_REVIEW_GUIDE.md), and [honest LinkedIn case study](docs/LINKEDIN_CASE_STUDY.md). CI generates five synthetic dashboard screenshots in the `synthetic-demo-preview` artifact. This is not a hosted application. The final Persian manual follows the owner's final authorized merge.
+
+The repository name includes AI, but the current implementation uses fixed-template automation, not an LLM agent. No open-source license has been granted in this repository; obtain the owner's permission before redistribution or reuse beyond permissions provided by the hosting platform.
 
 ## Available now
 
@@ -69,7 +73,7 @@ npm test
 TEST_DATABASE_URL='postgres://USER:PASSWORD@localhost:5432/DISPOSABLE_TEST_DB' npm run test:integration
 npx playwright install chromium
 TEST_DATABASE_URL='postgres://USER:PASSWORD@localhost:5432/DISPOSABLE_TEST_DB' npm run test:e2e
-npm audit --omit=dev --audit-level=high
+npm audit --audit-level=high
 ```
 
 Integration tests require a disposable PostgreSQL database and fail when unconfigured. CI also builds the containers and checks behavior during a database outage. See [testing](docs/TESTING.md).

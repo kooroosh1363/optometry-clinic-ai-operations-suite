@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
 import { createPool, databaseReady } from '../../src/db.js';
 import { migrateAll } from '../../src/migrate.js';
 import { createApp } from '../../src/app.js';
@@ -20,6 +21,93 @@ async function fixture() {
 async function cleanup(ids) { for (const table of ['mock_delivery_receipts','automation_drafts','consent_events','audit_events','recalls','appointments','access_tokens','patients','staff']) await pool.query(`DELETE FROM ${table} WHERE clinic_id=$1`, [ids.clinic_id]); await pool.query('DELETE FROM clinics WHERE id=$1', [ids.clinic_id]); }
 async function connect(page, token) { await page.goto('/dashboard'); await page.getByLabel('Operator-issued credential').fill(token); await page.getByRole('button', { name: /Connect to clinic/ }).click(); await expect(page.getByText('Workspace at a glance')).toBeVisible(); }
 function assertNoPersistence(value) { expect(value.local).toEqual([]); expect(value.session).toEqual([]); expect(value.cookie).toBe(''); expect(value.url).not.toContain('Bearer'); }
+
+test('release walkthrough creates records, gates delivery and reports the same persisted work', async ({ page }) => {
+  const f = await fixture(), admin = await issueToken(pool, f.clinic_id, f.administrator_id);
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  page.on('dialog', dialog => dialog.accept());
+  const preview = 'test-results/demo-preview'; await mkdir(preview, { recursive: true });
+  const capture = async name => { await expect(page.locator('#token')).toHaveValue(''); await page.screenshot({ path: `${preview}/${name}.png`, fullPage: true }); };
+  try {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await connect(page, admin.token);
+    await page.getByRole('button', { name: 'Patients', exact: true }).click();
+    await page.getByRole('button', { name: '+ Add patient' }).click();
+    await page.getByLabel('Display name').fill('Avery Synthetic');
+    await page.getByLabel('Contact email').fill('avery@example.invalid');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    const patientCard = page.locator('.patient-card').filter({ hasText: 'Avery Synthetic' });
+    await patientCard.getByRole('button', { name: 'Record demo consent' }).click();
+    await expect(patientCard).toContainText('Messaging consent recorded');
+    await page.getByRole('button', { name: 'Appointments', exact: true }).click();
+    await page.getByRole('button', { name: '+ Book appointment' }).click();
+    await page.getByLabel('Patient', { exact: true }).selectOption({ label: 'Avery Synthetic' });
+    await page.getByLabel('Optometrist').selectOption({ label: 'Demo Optometrist' });
+    await page.getByLabel('Starts').fill('2020-01-02T10:00:00-08:00');
+    await page.getByLabel('Ends').fill('2020-01-02T10:30:00-08:00');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByLabel('Change status for Avery Synthetic').selectOption('checked_in');
+    await expect(page.locator('#appointments')).toContainText('checked in');
+    await page.getByLabel('Change status for Avery Synthetic').selectOption('completed');
+    await expect(page.locator('#appointments')).toContainText('completed');
+    await capture('01-appointments');
+    await page.getByRole('button', { name: 'Recall queue', exact: true }).click();
+    await page.getByRole('button', { name: '+ Add recall' }).click();
+    await page.getByLabel('Patient', { exact: true }).selectOption({ label: 'Avery Synthetic' });
+    await page.getByLabel('Due date').fill('2020-01-03');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Generate draft' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Operation recorded.' })).toBeVisible();
+    await page.getByRole('button', { name: 'Automation', exact: true }).click();
+    await expect(page.locator('#automation blockquote')).toContainText('2020-01-03');
+    await expect(page.getByRole('button', { name: 'Simulate delivery' })).toHaveCount(0);
+    await capture('02-human-review');
+    await page.getByRole('button', { name: 'Approve exact draft' }).click();
+    await page.getByRole('button', { name: 'Simulate delivery' }).click();
+    await expect(page.getByText('Mock receipt recorded. No real message was sent.')).toBeVisible();
+    await capture('03-mock-receipt');
+    expect(Number((await pool.query('SELECT count(*) FROM mock_delivery_receipts WHERE clinic_id=$1', [f.clinic_id])).rows[0].count)).toBe(1);
+    await page.getByRole('button', { name: 'Reports', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Run report' })).toBeEnabled();
+    await page.getByLabel('From date').fill('2020-01-02');
+    await page.getByLabel('To date').fill('2020-01-03');
+    await page.getByRole('button', { name: 'Run report' }).click();
+    await expect(page.locator('#report-results')).toContainText('0 of 1 ended completed/no-show bookings');
+    await expect(page.locator('#report-results')).toContainText('0 of 1 due recalls');
+    await expect(page.getByRole('row', { name: '2020-01-02 1 1 0', exact: true })).toBeVisible();
+    await capture('04-reports');
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await capture('05-mobile-reports');
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page.locator('#patients-grid')).toBeEmpty();
+    await expect(page.locator('#report-results')).toBeEmpty();
+    expect(errors).toEqual([]);
+  } finally { await cleanup(f); }
+});
+
+test('late save response leaves a subsequently opened form and its input intact', async ({ page }) => {
+  const f = await fixture(); let release, started, finished;
+  const gate = new Promise(r => release = r), seen = new Promise(r => started = r), done = new Promise(r => finished = r);
+  try {
+    await connect(page, f.writer.token);
+    await page.route('**/v1/patients', async route => {
+      try { const response = await route.fetch(); started(); await gate; await route.fulfill({ response }); } finally { finished(); }
+    });
+    await page.getByRole('button', { name: 'Patients', exact: true }).click();
+    const opener = page.getByRole('button', { name: '+ Add patient' });
+    await opener.click(); await page.getByLabel('Display name').fill('Earlier Synthetic');
+    await page.getByRole('button', { name: 'Save', exact: true }).click(); await seen;
+    await page.keyboard.press('Escape'); await expect(opener).toBeFocused();
+    await opener.click(); await page.getByLabel('Display name').fill('Unsubmitted Synthetic');
+    release(); await done;
+    await expect(page.locator('#patients-grid')).toContainText('Earlier Synthetic');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByLabel('Display name')).toHaveValue('Unsubmitted Synthetic');
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+    expect((await pool.query("SELECT id FROM patients WHERE clinic_id=$1 AND display_name='Unsubmitted Synthetic'", [f.clinic_id])).rowCount).toBe(0);
+  } finally { release?.(); await cleanup(f); }
+});
 
 test('reception completes patient, booking, recall and status flows against real API', async ({ page }) => {
   const f = await fixture();
