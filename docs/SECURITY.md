@@ -1,5 +1,9 @@
 # Security boundaries
 
+Phase 5 review: analytical queries obtain clinic identity/timezone from authentication, validate bounded dates and bind all values as SQL parameters. Reports expose aggregate counts without patient fields and bypass the first-100 UI sample. Browser session epochs plus cancellation reject late responses and clear rendered data on logout; collection/report sequence guards prevent old refreshes winning. Tokens are cleared from the entry field on connection. Cancellation does not revoke a server credential or reverse committed writes. Explicit-offset booking inputs remove implicit device-local DST normalization.
+
+Residual risks remain: same-origin malicious code can access a live token; synthetic operator credentials are not production identity; no rate limiting or immutable audit; operational lists remain capped at 100; current-status reports do not reconstruct past states. Existing role/tenant/concurrency tests are regression gates, not a penetration test or compliance certification.
+
 Use synthetic data only. This reference API is not approved for production, internet-facing patient workflows, or regulated information. No HIPAA, PIPEDA, certification, or penetration-test claim is made.
 
 Current controls: 256-bit random opaque credentials with SHA-256 hashes, expiry and revocation; active staff/role checks; clinic-scoped SQL; version checks; strict JSON fields and 16 KiB body limit; transactional write audit metadata; loopback Compose port; database not host-published; non-root API container; bounded DB timeouts; generic errors; response security headers; parameterized values; migration checksums; lockfile and CI audit.

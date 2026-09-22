@@ -1,7 +1,11 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const state = { token: '', me: null, patients: [], staff: [], appointments: [], recalls: [], automation: [], view: 'overview', modal: null };
-const titles = { overview: 'Good morning', appointments: 'Appointment schedule', patients: 'Patient directory', recalls: 'Recall queue', automation: 'Controlled automation' };
+const titles = { overview: 'Clinic overview', appointments: 'Appointment schedule', patients: 'Patient directory', recalls: 'Recall queue', automation: 'Controlled automation', analytics: 'Management reports' };
+let sessionEpoch = 0, loadSequence = 0, reportSequence = 0;
+let sessionController = new AbortController();
+const stale = () => Object.assign(new Error('Obsolete session'), { code: 'stale_session' });
+function newSession() { sessionEpoch++; loadSequence++; reportSequence++; sessionController.abort(); sessionController = new AbortController(); }
 const errorText = {
   consent_required: 'Messaging consent is missing or revoked.', contact_required: 'A contact email is required.',
   source_changed: 'Consent or recall details changed. This draft can no longer be approved or executed.',
@@ -25,13 +29,20 @@ function formatTime(value) { return new Intl.DateTimeFormat(undefined, { hour: '
 function message(code, fallback) { return errorText[code] || fallback || 'Something went wrong. Try again.'; }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, { ...options, headers: { authorization: `Bearer ${state.token}`, ...(options.body ? { 'content-type': 'application/json' } : {}), ...options.headers } });
+  const epoch = sessionEpoch;
+  let response;
+  try { response = await fetch(path, { ...options, signal: sessionController.signal, headers: { authorization: `Bearer ${state.token}`, ...(options.body ? { 'content-type': 'application/json' } : {}), ...options.headers } }); }
+  catch (error) { if (epoch !== sessionEpoch) throw stale(); throw error; }
   let payload = {};
   try { payload = await response.json(); } catch { /* A proxy failure may have no JSON body. */ }
+  if (epoch !== sessionEpoch) throw stale();
   if (!response.ok) { const error = new Error(message(payload.error)); error.code = payload.error; error.status = response.status; throw error; }
   return payload;
 }
 async function connect(token) {
+  newSession();
+  const epoch = sessionEpoch, button = $('#connect-form button[type="submit"]');
+  button.disabled = true; $('#token').value = '';
   state.token = token;
   try {
     state.me = (await api('/v1/me')).data;
@@ -43,29 +54,44 @@ async function connect(token) {
     if (state.me.role === 'optometrist') showToast('Read-only role: operational changes are disabled.');
     const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (browserZone && browserZone !== state.me.timezone) {
-      const warning = $('#timezone-warning'); warning.textContent = `Clinic times display in ${state.me.timezone}. New booking fields use your device zone (${browserZone}); verify the converted time before saving.`; warning.hidden = false;
+      const warning = $('#timezone-warning'); warning.textContent = `Clinic times display in ${state.me.timezone}. Your device uses ${browserZone}. Booking inputs require an explicit UTC offset.`; warning.hidden = false;
     }
+    const today = new Intl.DateTimeFormat('en-CA', {timeZone:state.me.timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    $('#report-from').value = today.slice(0,8) + '01'; $('#report-to').value = today;
     await loadAll();
   } catch (error) {
-    state.token = ''; state.me = null;
-    $('#connect-error').textContent = message(error.code, error.message);
-    $('#token').focus();
-  }
+    if (error.code === 'stale_session') return;
+    logout(message(error.code, error.message));
+  } finally { if (epoch === sessionEpoch) button.disabled = false; }
 }
 function logout(reason = '') {
+  newSession();
   state.token = ''; state.me = null; state.patients = []; state.staff = []; state.appointments = []; state.recalls = []; state.automation = [];
+  state.view = 'overview'; closeModal();
+  $('#save-record').disabled = false; $('#save-record').textContent = 'Save';
+  ['#overview-appointments','#overview-recalls','#appointments-body','#patients-grid','#recalls-list','#automation-list','#report-results','#form-fields'].forEach(selector => clear($(selector)));
+  ['#staff-name','#staff-role','#avatar','#clinic-zone','#form-error','#report-error','#toast'].forEach(selector => { $(selector).textContent = ''; });
+  $$('.metrics strong').forEach(node => node.textContent = '0');
+  $('#report-form').reset(); $('#report-loading').hidden = true; $('#run-report').disabled = false;
+  $('#connect-form button[type="submit"]').disabled = false;
+  $('#toast').hidden = true; clearTimeout(toastTimer); $('#global-error').hidden = true;
+  $('#global-error span').textContent = ''; $('#loading').hidden = true;
+  $('#token').type = 'password'; $('#reveal-token').textContent = 'Show'; $('#reveal-token').setAttribute('aria-label','Show credential');
   $('#app-view').hidden = true; $('#connect-view').hidden = false; $('#token').value = ''; $('#timezone-warning').hidden = true;
-  if (reason) $('#connect-error').textContent = reason;
+  $('#connect-error').textContent = reason;
   $('#token').focus();
 }
 async function loadAll() {
+  const sequence = ++loadSequence;
   $('#loading').hidden = false; $('#global-error').hidden = true; $$('.view').forEach(v => v.hidden = true);
   try {
     const [patients, staff, appointments, recalls, automation] = await Promise.all(['/v1/patients?limit=100', '/v1/staff?limit=100', '/v1/appointments?limit=100', '/v1/recalls?limit=100', '/v1/automation?limit=100'].map(path => api(path)));
+    if (sequence !== loadSequence || !state.me) return;
     state.automation = automation.data;
     state.patients = patients.data; state.staff = staff.data; state.appointments = appointments.data; state.recalls = recalls.data;
     render(); $('#loading').hidden = true; showView(state.view);
   } catch (error) {
+    if (error.code === 'stale_session' || sequence !== loadSequence) return;
     $('#loading').hidden = true;
     if (error.status === 401) return logout(message('unauthorized'));
     const box = $('#global-error'); box.querySelector('span').textContent = message(error.code, error.message); box.hidden = false;
@@ -164,6 +190,7 @@ async function automationMutation(button, path, data, method = 'POST') {
     showToast(result.data?.status === 'failed' ? 'Mock delivery failed. Review before retrying.' : 'Operation recorded. No real message sent.');
     await loadAll();
   } catch (error) {
+    if (error.code === 'stale_session') return;
     showToast(message(error.code,error.message),true);
     if (error.status === 401) logout(message('unauthorized'));
     else if (error.status === 409) await loadAll();
@@ -172,11 +199,13 @@ async function automationMutation(button, path, data, method = 'POST') {
 async function updateStatus(collection, item, status) {
   if (!status) return;
   try { await api(`/v1/${collection}/${item.id}`, { method: 'PATCH', body: JSON.stringify({ version: item.version, status }) }); showToast('Status updated.'); await loadAll(); }
-  catch (error) { showToast(message(error.code, error.message), true); if (['version_conflict', 'invalid_transition'].includes(error.code)) await loadAll(); if (error.status === 401) logout(message('unauthorized')); }
+  catch (error) { if (error.code === 'stale_session') return; showToast(message(error.code, error.message), true); if (['version_conflict', 'invalid_transition'].includes(error.code)) await loadAll(); if (error.status === 401) logout(message('unauthorized')); }
 }
 function showView(view) {
+  if (!state.me) return;
   state.view = view; $$('.view').forEach(node => node.hidden = node.id !== view); $$('.nav-item').forEach(node => node.classList.toggle('active', node.dataset.view === view));
   $('#view-title').textContent = titles[view]; $('.sidebar').classList.remove('open'); $('#menu').setAttribute('aria-expanded', 'false'); $('#workspace').focus();
+  if (view === 'analytics') loadReport();
 }
 function field(name, label, type = 'text', extra = '') { return `<div class="field"><label for="field-${name}">${label}</label><input id="field-${name}" name="${name}" type="${type}" ${extra} required></div>`; }
 function selectField(name, label, options) { return `<div class="field"><label for="field-${name}">${label}</label><select id="field-${name}" name="${name}" required><option value="">Select…</option>${options.map(o => `<option value="${o.id}"></option>`).join('')}</select></div>`; }
@@ -184,7 +213,7 @@ function openModal(type) {
   state.modal = type; const fields = $('#form-fields');
   const titlesMap = { patient: 'Add patient', appointment: 'Book appointment', recall: 'Add recall' }; $('#modal-title').textContent = titlesMap[type];
   if (type === 'patient') fields.innerHTML = field('display_name', 'Display name') + field('contact_email', 'Contact email (optional)', 'email', 'required=""');
-  if (type === 'appointment') fields.innerHTML = selectField('patient_id', 'Patient', state.patients) + selectField('practitioner_id', 'Optometrist', state.staff.filter(s => s.role === 'optometrist' && s.active)) + `<div class="field-grid">${field('starts_at', 'Starts', 'datetime-local')}${field('ends_at', 'Ends', 'datetime-local')}</div><p class="field-help">Times use your device timezone and are converted to an explicit instant.</p>`;
+  if (type === 'appointment') fields.innerHTML = selectField('patient_id', 'Patient', state.patients) + selectField('practitioner_id', 'Optometrist', state.staff.filter(s => s.role === 'optometrist' && s.active)) + `<div class="field-grid">${field('starts_at', 'Starts (ISO with offset)', 'text', 'placeholder="2030-01-02T10:00:00-08:00"')}${field('ends_at', 'Ends (ISO with offset)', 'text', 'placeholder="2030-01-02T10:30:00-08:00"')}</div><p class="field-help">Include seconds and Z or a UTC offset. Choose the correct offset for that date; daylight-saving transitions can repeat a local time. Example: 2030-01-02T10:00:00-08:00.</p>`;
   if (type === 'recall') fields.innerHTML = selectField('patient_id', 'Patient', state.patients) + field('due_date', 'Due date', 'date');
   fields.querySelectorAll('select').forEach(select => { const source = select.name === 'patient_id' ? state.patients : state.staff.filter(s => s.role === 'optometrist' && s.active); [...select.options].slice(1).forEach((option, index) => option.textContent = source[index].display_name); });
   if (type === 'patient') $('#field-contact_email').required = false;
@@ -192,14 +221,51 @@ function openModal(type) {
 }
 function closeModal() { $('#modal-backdrop').hidden = true; document.body.style.overflow = ''; state.modal = null; document.querySelector(`[data-open]`)?.focus(); }
 async function submitRecord(form) {
+  const epoch = sessionEpoch;
   if (!form.reportValidity()) return;
   const values = Object.fromEntries(new FormData(form)); let path = `/v1/${state.modal === 'patient' ? 'patients' : state.modal === 'appointment' ? 'appointments' : 'recalls'}`;
   if (state.modal === 'patient' && !values.contact_email) delete values.contact_email;
-  if (state.modal === 'appointment') { values.starts_at = new Date(values.starts_at).toISOString().replace('.000Z', 'Z'); values.ends_at = new Date(values.ends_at).toISOString().replace('.000Z', 'Z'); }
   const button = $('#save-record'); button.disabled = true; button.textContent = 'Saving…';
   try { const savedType = state.modal; await api(path, { method: 'POST', body: JSON.stringify(values) }); closeModal(); showToast(`${savedType === 'patient' ? 'Patient' : savedType === 'appointment' ? 'Appointment' : 'Recall'} saved.`); await loadAll(); }
-  catch (error) { if (error.status === 401) { closeModal(); return logout(message('unauthorized')); } $('#form-error').textContent = message(error.code, error.message); }
-  finally { button.disabled = false; button.textContent = 'Save'; }
+  catch (error) { if (error.code === 'stale_session') return; if (error.status === 401) { closeModal(); return logout(message('unauthorized')); } $('#form-error').textContent = message(error.code, error.message); }
+  finally { if (epoch === sessionEpoch) { button.disabled = false; button.textContent = 'Save'; } }
+}
+const percentage = value => value === null ? 'N/A' : new Intl.NumberFormat(undefined,{style:'percent',maximumFractionDigits:1}).format(value);
+async function loadReport() {
+  if (!state.me) return;
+  const sequence = ++reportSequence;
+  clear($('#report-results')); $('#report-error').textContent = ''; $('#report-loading').hidden = false; $('#run-report').disabled = true;
+  try {
+    const query = new URLSearchParams({from:$('#report-from').value,to:$('#report-to').value});
+    const report = (await api('/v1/analytics?' + query)).data;
+    if (sequence !== reportSequence) return;
+    renderReport(report);
+  } catch (error) {
+    if (error.code === 'stale_session' || sequence !== reportSequence) return;
+    if (error.status === 401) return logout(message('unauthorized'));
+    $('#report-error').textContent = error.code === 'invalid_request' ? 'Choose valid dates in order, spanning at most 366 days.' : message(error.code,error.message);
+  } finally {
+    if (sequence === reportSequence) { $('#report-loading').hidden = true; $('#run-report').disabled = false; }
+  }
+}
+function renderReport(report) {
+  const root = $('#report-results'), a = report.appointments, r = report.recalls, d = report.automation;
+  root.append(el('p','',`${report.from} through ${report.to} · ${report.timezone} · All matching records`));
+  root.append(el('p','field-help',`Current statuses as of ${report.as_of}. Rates are descriptive, not evidence of business improvement.`));
+  const metrics = el('div','metrics');
+  [["No-show rate",percentage(a.no_show_rate),`${a.ended_no_show} of ${a.resolved_outcomes} ended completed/no-show bookings`],
+    ['Recall closure',percentage(r.closure_rate),`${r.closed} of ${r.total} due recalls; closure does not prove attendance`],
+    ['Overdue open recalls',r.overdue_open,'Pending/contacted and due before the clinic-local report date'],
+    ['Simulated deliveries',d.simulated,'Mock receipts only; no real messages']].forEach(([label,value,detail])=>{
+      const card=el('article'), box=el('div'); box.append(el('small','',label),el('strong','',value),el('p','',detail));card.append(box);metrics.append(card);
+    });root.append(metrics);
+  const summary=el('div','panel automation-card');
+  summary.append(el('h3','','Cohort counts'),el('p','',`Appointments: ${a.total} total · ${a.completed} completed · ${a.no_show} no-show · ${a.cancelled} cancelled · ${a.scheduled} scheduled · ${a.checked_in} checked in`),
+    el('p','',`Recalls: ${r.total} total · ${r.pending} pending · ${r.contacted} contacted · ${r.closed} closed`),
+    el('p','',`Automation: ${d.total} drafts · ${d.draft} awaiting review · ${d.approved} approved · ${d.rejected} rejected · ${d.failed} failed · ${d.attempts} attempts`));root.append(summary);
+  const wrap=el('div','panel table-wrap'), table=el('table'), caption=el('caption','','Daily appointment cohort (clinic-local dates)'), head=el('thead'), hr=el('tr');
+  ['Date','Bookings','Ended completed','Ended no-show'].forEach(label=>{const th=el('th','',label);th.scope='col';hr.append(th);});head.append(hr);table.append(caption,head);
+  const body=el('tbody');report.daily.forEach(day=>{const row=el('tr');[day.date,day.total,day.ended_completed,day.ended_no_show].forEach(value=>row.append(el('td','',value)));body.append(row);});table.append(body);wrap.append(table);root.append(wrap);
 }
 let toastTimer;
 function showToast(text, danger = false) { const toast = $('#toast'); toast.textContent = text; toast.style.background = danger ? '#822f2f' : ''; toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, 4200); }
@@ -207,6 +273,7 @@ function showToast(text, danger = false) { const toast = $('#toast'); toast.text
 $('#connect-form').addEventListener('submit', event => { event.preventDefault(); $('#connect-error').textContent = ''; const token = $('#token').value.trim(); if (!/^[A-Za-z0-9_-]{43}$/.test(token)) { $('#connect-error').textContent = 'Enter the 43-character credential issued by the operator.'; return; } connect(token); });
 $('#reveal-token').addEventListener('click', () => { const input = $('#token'), show = input.type === 'password'; input.type = show ? 'text' : 'password'; $('#reveal-token').textContent = show ? 'Hide' : 'Show'; $('#reveal-token').setAttribute('aria-label', show ? 'Hide credential' : 'Show credential'); });
 $('#sign-out').addEventListener('click', () => logout('Signed out. The in-memory credential was cleared.'));
+$('#report-form').addEventListener('submit', event => { event.preventDefault(); if(event.currentTarget.reportValidity()) loadReport(); });
 $('#retry-load').addEventListener('click', loadAll); $('#menu').addEventListener('click', () => { const open = $('.sidebar').classList.toggle('open'); $('#menu').setAttribute('aria-expanded', String(open)); });
 $$('.nav-item').forEach(node => node.addEventListener('click', () => showView(node.dataset.view))); $$('[data-go]').forEach(node => node.addEventListener('click', () => showView(node.dataset.go))); $$('[data-open]').forEach(node => node.addEventListener('click', () => openModal(node.dataset.open)));
 $('#close-modal').addEventListener('click', closeModal); $('#cancel-modal').addEventListener('click', closeModal); $('#record-form').addEventListener('submit', event => { event.preventDefault(); submitRecord(event.currentTarget); });

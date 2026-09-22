@@ -16,7 +16,9 @@ export async function serveStatic(req, res) {
   try {
     const content = await readFile(new URL(item[0], import.meta.url));
     res.setHeader('Content-Type', item[1]);
-    res.setHeader('Cache-Control', path.startsWith('/assets/') ? 'public, max-age=3600' : 'no-store');
+    // Asset names are not content-hashed: revalidate to avoid mixing a new HTML
+    // document with an old cached script after an upgrade.
+    res.setHeader('Cache-Control', path.startsWith('/assets/') ? 'no-cache' : 'no-store');
     res.writeHead(200);
     res.end(req.method === 'HEAD' ? undefined : content);
   } catch { res.writeHead(503); res.end(); }

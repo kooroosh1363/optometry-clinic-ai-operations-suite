@@ -2,9 +2,13 @@
 
 Human-controlled optometry operations reference project, built in six reviewable phases.
 
-**Status: Phase 4 controlled recall automation and dashboard. Not a deployed clinic product, medical device, or real client engagement. Use synthetic data only.**
+**Status: Phase 5 management reports and session hardening. Not a deployed clinic product, medical device, or real client engagement. Use synthetic data only.**
 
 ## Available now
+
+Reports calculate clinic-local date cohorts directly from PostgreSQL, including records beyond the 100-row operational views. They show ended-outcome no-show rate, recall closure/overdue counts, mock automation status and daily appointment counts. Empty denominators display N/A. Read the [metric definitions](docs/PHASE_5_CONTRACT.md) before interpreting results: closed recalls are not proof of attendance, and simulated delivery is not a sent message.
+
+Select Reports, choose inclusive From/To dates (maximum 366 days), and run the report. Any clinic staff role can read it. Booking fields require ISO timestamps with seconds and an explicit offset, such as `2030-01-02T10:00:00-08:00`; device-local time is no longer silently converted. Sign-out clears rendered data and cancels/invalidates responses belonging to the old session.
 
 Responsive operations dashboard plus the authenticated Node.js administrative API, PostgreSQL migrations, clinic-scoped records, patient creation, appointment booking/rescheduling/status transitions, recall tracking, version-checked updates, audit metadata, browser tests and Docker Compose setup.
 

@@ -18,7 +18,7 @@ async function fixture() {
   return { ...ids, reception, writer: await issueToken(pool, ids.clinic_id, reception), reader: await issueToken(pool, ids.clinic_id, ids.practitioner_id) };
 }
 async function cleanup(ids) { for (const table of ['mock_delivery_receipts','automation_drafts','consent_events','audit_events','recalls','appointments','access_tokens','patients','staff']) await pool.query(`DELETE FROM ${table} WHERE clinic_id=$1`, [ids.clinic_id]); await pool.query('DELETE FROM clinics WHERE id=$1', [ids.clinic_id]); }
-async function connect(page, token) { await page.goto('/dashboard'); await page.getByLabel('Operator-issued credential').fill(token); await page.getByRole('button', { name: /Connect to clinic/ }).click(); await expect(page.getByText('Today at a glance')).toBeVisible(); }
+async function connect(page, token) { await page.goto('/dashboard'); await page.getByLabel('Operator-issued credential').fill(token); await page.getByRole('button', { name: /Connect to clinic/ }).click(); await expect(page.getByText('Workspace at a glance')).toBeVisible(); }
 function assertNoPersistence(value) { expect(value.local).toEqual([]); expect(value.session).toEqual([]); expect(value.cookie).toBe(''); expect(value.url).not.toContain('Bearer'); }
 
 test('reception completes patient, booking, recall and status flows against real API', async ({ page }) => {
@@ -28,7 +28,7 @@ test('reception completes patient, booking, recall and status flows against real
     await page.getByRole('button', { name: 'Patients' }).click(); await page.getByRole('button', { name: '+ Add patient' }).click(); await page.getByLabel('Display name').fill('Avery Synthetic'); await page.getByLabel('Contact email').fill('avery@example.invalid'); await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByText('Avery Synthetic')).toBeVisible();
     await page.getByRole('button', { name: 'Appointments' }).click(); await page.getByRole('button', { name: '+ Book appointment' }).click(); await page.getByLabel('Patient', { exact: true }).selectOption({ label: 'Avery Synthetic' }); await page.getByLabel('Optometrist').selectOption({ label: 'Demo Optometrist' });
-    await page.getByLabel('Starts').fill('2030-01-02T10:00'); await page.getByLabel('Ends').fill('2030-01-02T10:30'); await page.getByRole('button', { name: 'Save' }).click(); await expect(page.getByRole('cell', { name: 'Avery Synthetic' })).toBeVisible();
+    await page.getByLabel('Starts').fill('2030-01-02T10:00:00-08:00'); await page.getByLabel('Ends').fill('2030-01-02T10:30:00-08:00'); await page.getByRole('button', { name: 'Save' }).click(); await expect(page.getByRole('cell', { name: 'Avery Synthetic' })).toBeVisible();
     await page.getByLabel('Change status for Avery Synthetic').selectOption('checked_in'); await expect(page.locator('#appointments').getByText('checked in', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Recall queue' }).click(); await page.getByRole('button', { name: '+ Add recall' }).click(); await page.getByLabel('Patient', { exact: true }).selectOption({ label: 'Avery Synthetic' }); await page.getByLabel('Due date').fill('2030-03-01'); await page.getByRole('button', { name: 'Save' }).click(); await expect(page.getByText('Due 2030-03-01')).toBeVisible();
     assertNoPersistence(await page.evaluate(() => ({ local: Object.keys(localStorage), session: Object.keys(sessionStorage), cookie: document.cookie, url: location.href })));
@@ -71,4 +71,66 @@ test('administrator records consent and reviews an immutable draft before mock d
     await page.setViewportSize({width:390,height:844});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   } finally { await cleanup(f); }
+});
+
+test('reports show exact database cohorts, empty denominators, errors and mobile layout',async({page})=>{
+  const f=await fixture();
+  for(const [i,status] of ['completed','completed','no_show'].entries()) await pool.query(`INSERT INTO appointments(clinic_id,id,patient_id,practitioner_id,starts_at,ends_at,status)
+    VALUES($1,$2,$3,$4,$5,$6,$7)`,[f.clinic_id,randomUUID(),f.patient_id,f.practitioner_id,`2020-01-01T${10+i}:00:00Z`,`2020-01-01T${10+i}:30:00Z`,status]);
+  try{
+    await connect(page,f.reader.token);await page.getByRole('button',{name:'Reports',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Run report'})).toBeEnabled();
+    await page.getByLabel('From date').fill('2020-01-01');await page.getByLabel('To date').fill('2020-01-02');
+    await page.getByRole('button',{name:'Run report'}).click();
+    await expect(page.locator('#report-results')).toContainText('33.3%');
+    await expect(page.locator('#report-results')).toContainText('1 of 3 ended completed/no-show bookings');
+    await expect(page.getByRole('row',{name:'2020-01-01 3 2 1',exact:true})).toBeVisible();
+    await expect(page.getByRole('row',{name:'2020-01-02 0 0 0',exact:true})).toBeVisible();
+    const results=await new AxeBuilder({page}).analyze();expect(results.violations.filter(v=>['critical','serious'].includes(v.impact))).toEqual([]);
+    await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.getByLabel('From date').fill('2020-01-03');await page.getByRole('button',{name:'Run report'}).click();
+    await expect(page.locator('#report-error')).toContainText('Choose valid dates');await expect(page.locator('#report-results')).toBeEmpty();
+    await page.getByLabel('To date').fill('2020-01-03');await page.getByRole('button',{name:'Run report'}).click();
+    await expect(page.locator('#report-results')).toContainText('N/A');
+    await page.route('**/v1/analytics?**',route=>route.fulfill({status:503,json:{error:'service_unavailable'}}));
+    await page.getByRole('button',{name:'Run report'}).click();await expect(page.locator('#report-error')).toContainText('temporarily unavailable');await expect(page.locator('#report-results')).toBeEmpty();
+  }finally{await cleanup(f);}
+});
+
+test('sign-out clears rendered data and discards a late report from the old session',async({page})=>{
+  const f=await fixture(),other=await fixture();
+  let release,started,finished;
+  const gate=new Promise(r=>release=r),seen=new Promise(r=>started=r),done=new Promise(r=>finished=r);
+  try{
+    await connect(page,f.writer.token);
+    await expect(page.getByLabel('Operator-issued credential')).toHaveValue('');
+    await page.route('**/v1/analytics?**',async route=>{
+      try{const response=await route.fetch();started();await gate;await route.fulfill({response});}catch{/* Browser aborts old-session responses. */}finally{finished();}
+    });
+    await page.getByRole('button',{name:'Reports',exact:true}).click();await seen;
+    await page.getByRole('button',{name:'Sign out'}).click();
+    await expect(page.locator('#patients-grid')).toBeEmpty();await expect(page.locator('#report-results')).toBeEmpty();
+    await page.getByLabel('Operator-issued credential').fill(other.reader.token);await page.getByRole('button',{name:/Connect to clinic/}).click();
+    await expect(page.getByText('Workspace at a glance')).toBeVisible();
+    release();await done;
+    await expect(page.locator('#report-results')).toBeEmpty();await expect(page.locator('#staff-name')).toHaveText('Demo Optometrist');
+    await expect(page.locator('#app-view')).toBeVisible();await expect(page.locator('#connect-view')).toBeHidden();
+  }finally{release?.();await cleanup(f);await cleanup(other);}
+});
+
+test('a committed mutation with a late response cannot restore the signed-out form or records',async({page})=>{
+  const f=await fixture();let release,started,finished;
+  const gate=new Promise(r=>release=r),seen=new Promise(r=>started=r),done=new Promise(r=>finished=r);
+  try{
+    await connect(page,f.writer.token);
+    await page.route('**/v1/patients',async route=>{
+      try{const response=await route.fetch();started();await gate;await route.fulfill({response});}catch{/* Expected when the session is cancelled. */}finally{finished();}
+    });
+    await page.getByRole('button',{name:'Patients',exact:true}).click();await page.getByRole('button',{name:'+ Add patient'}).click();
+    await page.getByLabel('Display name').fill('Late Synthetic Response');await page.getByRole('button',{name:'Save',exact:true}).click();await seen;
+    await page.keyboard.press('Escape');await page.getByRole('button',{name:'Sign out'}).click();release();await done;
+    await expect(page.locator('#form-fields')).toBeEmpty();await expect(page.locator('#patients-grid')).toBeEmpty();await expect(page.locator('#toast')).toBeHidden();
+    await expect(page.locator('#connect-view')).toBeVisible();await expect(page.locator('#app-view')).toBeHidden();
+    assertNoPersistence(await page.evaluate(()=>({local:Object.keys(localStorage),session:Object.keys(sessionStorage),cookie:document.cookie,url:location.href})));
+  }finally{release?.();await cleanup(f);}
 });

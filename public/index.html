@@ -21,7 +21,7 @@
         <button class="primary wide" type="submit">Connect to clinic <span aria-hidden="true">→</span></button>
         <p id="connect-error" class="form-error" role="alert"></p>
       </form>
-      <p class="demo-note"><span></span> Synthetic data environment · Phase 4</p>
+      <p class="demo-note"><span></span> Synthetic data environment · Phase 5</p>
     </main>
   </section>
 
@@ -34,6 +34,7 @@
         <button class="nav-item" data-view="patients"><span aria-hidden="true">◎</span> Patients</button>
         <button class="nav-item" data-view="recalls"><span aria-hidden="true">↗</span> Recall queue</button>
         <button class="nav-item" data-view="automation"><span aria-hidden="true">✓</span> Automation</button>
+        <button class="nav-item" data-view="analytics"><span aria-hidden="true">▤</span> Reports</button>
       </nav>
       <div class="sidebar-foot"><span class="status-dot"></span><div><strong>API connected</strong><small id="clinic-zone"></small></div></div>
     </aside>
@@ -44,11 +45,12 @@
         <div class="user-block"><div class="user-meta"><strong id="staff-name"></strong><small id="staff-role"></small></div><span id="avatar" class="avatar" aria-hidden="true"></span><button id="sign-out" class="ghost">Sign out</button></div>
       </header>
       <div id="timezone-warning" class="notice" hidden role="status"></div>
+      <p class="field-help">Operational lists show up to 100 records per collection. Overview counts describe loaded records across all dates. Reports include all records matching the selected period.</p>
       <div id="global-error" class="notice danger" hidden role="alert"><span></span><button id="retry-load">Retry</button></div>
       <div id="loading" class="loading" role="status"><span></span>Loading clinic workspace…</div>
 
       <section id="overview" class="view" aria-labelledby="overview-heading" hidden>
-        <div class="section-heading"><div><p class="eyebrow">LIVE OPERATIONS</p><h2 id="overview-heading">Today at a glance</h2></div><button class="primary writer-only" data-open="appointment">+ New appointment</button></div>
+        <div class="section-heading"><div><p class="eyebrow">LOADED OPERATIONS</p><h2 id="overview-heading">Workspace at a glance</h2></div><button class="primary writer-only" data-open="appointment">+ New appointment</button></div>
         <div class="metrics">
           <article><span class="metric-icon mint">◷</span><div><small>Scheduled</small><strong id="metric-scheduled">0</strong><p>active bookings</p></div></article>
           <article><span class="metric-icon blue">◎</span><div><small>Patients</small><strong id="metric-patients">0</strong><p>in this clinic</p></div></article>
@@ -79,6 +81,17 @@
         <div class="section-heading"><div><p class="eyebrow">HUMAN CONTROL</p><h2 id="automation-heading">Recall automation</h2><p>Fixed template drafts · Explicit approval · Mock delivery only</p></div></div>
         <div class="notice">No real messages are sent. Review the exact text before approving. Consent and source records are checked again at execution.</div>
         <div id="automation-list" class="stack-list"></div>
+      </section>
+      <section id="analytics" class="view" aria-labelledby="analytics-heading" hidden>
+        <div class="section-heading"><div><p class="eyebrow">MANAGEMENT</p><h2 id="analytics-heading">Clinic reports</h2><p>Inclusive clinic-local dates, up to 366 days. N/A means there is no denominator.</p></div></div>
+        <form id="report-form" class="report-form">
+          <div class="field"><label for="report-from">From date</label><input id="report-from" type="date" min="2000-01-01" max="2099-12-31" required></div>
+          <div class="field"><label for="report-to">To date</label><input id="report-to" type="date" min="2000-01-01" max="2099-12-31" required></div>
+          <button id="run-report" class="primary" type="submit">Run report</button>
+        </form>
+        <p id="report-error" class="form-error" role="alert"></p>
+        <p id="report-loading" role="status" hidden>Calculating report…</p>
+        <div id="report-results" class="stack-list"></div>
       </section>
       <footer>Northstar synthetic operations reference · No clinical decisions</footer>
     </main>

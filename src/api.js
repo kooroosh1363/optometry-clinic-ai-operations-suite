@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { automation, mockDelivery } from './automation.js';
+import { analytics } from './analytics.js';
 import { authenticate, requireWriter } from './auth.js';
 import { ApiError, invalid, object, uuid, name, interval, version, timezone, dateOnly, pagination } from './validation.js';
 
@@ -43,6 +44,10 @@ async function practitioner(c, clinic, id) {
   if (!r.rowCount) throw new ApiError(400, 'invalid_reference');
 }
 async function dispatch(c, actor, req, url, input, deliver) {
+  if (url.pathname === '/v1/analytics') {
+    if (req.method !== 'GET') throw new ApiError(405, 'method_not_allowed');
+    return { data: await analytics(c, actor, url.searchParams) };
+  }
   const automated = await automation(c, actor, req, url, input, deliver);
   if (automated) return automated;
   const path = url.pathname, method = req.method;

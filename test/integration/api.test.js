@@ -9,6 +9,7 @@ import { issueToken, tokenHash } from '../../src/auth.js';
 import { createDemo, revokeToken } from '../../src/operator.js';
 import { readFile } from 'node:fs/promises';
 import { mockDelivery } from '../../src/automation.js';
+import { reportSql } from '../../src/analytics.js';
 
 if (!process.env.TEST_DATABASE_URL) throw new Error('TEST_DATABASE_URL required; use a disposable database');
 const pool = createPool(process.env.TEST_DATABASE_URL);
@@ -356,4 +357,109 @@ test('003 migration repeats safely and refuses checksum changes',async()=>{
   await migrateAll(pool); assert.equal(await databaseReady(pool),true);
   const sql=await readFile(new URL('../../db/migrations/003_controlled_automation.sql',import.meta.url),'utf8');
   await assert.rejects(()=>migrate(pool,sql+'\n-- changed','003'),/checksum/);
+});
+
+async function analyticAppointment(f, starts, status='completed', ends) {
+  const id=randomUUID();
+  await pool.query(`INSERT INTO appointments(clinic_id,id,patient_id,practitioner_id,starts_at,ends_at,status)
+    VALUES($1,$2,$3,$4,$5,$6,$7)`,[f.a.clinic_id,id,f.a.patient_id,f.a.practitioner_id,starts,ends ?? new Date(Date.parse(starts)+1800000).toISOString(),status]);
+  return id;
+}
+const reportPath=(from='2020-01-01',to=from)=>`/v1/analytics?from=${from}&to=${to}`;
+test('analytics has exact independent denominators and zero-filled daily cohorts',async t=>{
+  const f=await fixture(t);
+  for(const [i,status] of ['completed','completed','no_show','cancelled','scheduled','checked_in'].entries()) await analyticAppointment(f,`2020-01-01T${String(8+i).padStart(2,'0')}:00:00Z`,status);
+  for(const status of ['pending','contacted','closed']) await pool.query("INSERT INTO recalls(clinic_id,id,patient_id,due_date,status) VALUES($1,$2,$3,'2020-01-01',$4)",[f.a.clinic_id,randomUUID(),f.a.patient_id,status]);
+  const response=await f.request(reportPath('2020-01-01','2020-01-02'));assert.equal(response.status,200);
+  const r=response.body.data;
+  assert.equal(r.timezone,'America/Vancouver');assert.ok(Date.parse(r.as_of));
+  assert.deepEqual(r.appointments,{total:6,completed:2,no_show:1,cancelled:1,scheduled:1,checked_in:1,ended_completed:2,ended_no_show:1,resolved_outcomes:3,no_show_rate:1/3});
+  assert.deepEqual(r.recalls,{total:3,pending:1,contacted:1,closed:1,overdue_open:2,closure_rate:1/3});
+  assert.deepEqual(r.daily,[{date:'2020-01-01',total:6,ended_completed:2,ended_no_show:1},{date:'2020-01-02',total:0,ended_completed:0,ended_no_show:0}]);
+  assert.equal(response.headers.get('cache-control'),'no-store');
+  for(const secret of [f.a.patient_id,'Synthetic Patient','contact_email','token']) assert.equal(JSON.stringify(r).includes(secret),false);
+});
+test('empty analytics and future outcomes report null rather than invented zero rates',async t=>{
+  const f=await fixture(t),empty=(await f.request(reportPath())).body.data;
+  assert.equal(empty.appointments.no_show_rate,null);assert.equal(empty.recalls.closure_rate,null);
+  assert.equal(empty.daily.length,1);assert.equal(empty.daily[0].total,0);
+  await analyticAppointment(f,'2099-01-01T10:00:00Z','no_show');
+  const future=(await f.request(reportPath('2099-01-01'))).body.data.appointments;
+  assert.equal(future.total,1);assert.equal(future.no_show,1);assert.equal(future.resolved_outcomes,0);assert.equal(future.no_show_rate,null);
+});
+test('analytics respects spring-forward clinic boundaries and exclusive next midnight',async t=>{
+  const f=await fixture(t);
+  for(const instant of ['2024-03-10T07:59:59Z','2024-03-10T08:00:00Z','2024-03-11T06:59:59Z','2024-03-11T07:00:00Z']) await analyticAppointment(f,instant);
+  const r=(await f.request(reportPath('2024-03-10'))).body.data;
+  assert.equal(r.appointments.total,2);assert.equal(r.daily[0].total,2);
+});
+test('fall-back repeated local hour counts both distinct instants once',async t=>{
+  const f=await fixture(t);
+  await analyticAppointment(f,'2024-11-03T01:30:00-07:00');await analyticAppointment(f,'2024-11-03T01:30:00-08:00');
+  const r=(await f.request(reportPath('2024-11-03'))).body.data;
+  assert.equal(r.appointments.total,2);assert.equal(r.daily[0].ended_completed,2);
+});
+test('analytics permits all staff roles while rejecting cross-clinic injection and unsupported inputs',async t=>{
+  const f=await fixture(t);await analyticAppointment(f,'2020-01-01T10:00:00Z');
+  for(const token of [f.admin.token,f.reader.token,f.reception.token]) assert.equal((await f.request(reportPath(),{token})).body.data.appointments.total,1);
+  assert.equal((await f.request(reportPath(),{token:f.foreign.token,headers:{'x-clinic-id':f.a.clinic_id}})).body.data.appointments.total,0);
+  assert.equal((await f.request(reportPath(),{token:null})).status,401);
+  for(const path of ['/v1/analytics',reportPath()+'&from=2020-01-01',reportPath()+'&clinic_id='+f.b.clinic_id,reportPath('2020-01-02','2020-01-01'),reportPath('2020-01-01','2021-01-01')]) assert.equal((await f.request(path)).status,400);
+  assert.equal((await f.request(reportPath(),{method:'POST',data:{}})).status,405);
+});
+test('recall report uses due cohort and current state, never treats closed as attendance',async t=>{
+  const f=await fixture(t),id=randomUUID();
+  await pool.query("INSERT INTO recalls(clinic_id,id,patient_id,due_date) VALUES($1,$2,$3,'2020-01-01')",[f.a.clinic_id,id,f.a.patient_id]);
+  assert.equal((await f.request(reportPath())).body.data.recalls.closure_rate,0);
+  await f.request('/v1/recalls/'+id,{method:'PATCH',data:{version:1,status:'closed'}});
+  const r=(await f.request(reportPath())).body.data;
+  assert.equal(r.recalls.closure_rate,1);assert.equal(r.recalls.contacted,0);assert.equal(r.appointments.total,0);
+});
+test('automation reporting uses creation cohort and distinguishes mock simulation from real delivery',async t=>{
+  const f=await automationFixture(t),d=await f.prepare();
+  await f.action(d.id,'approve',1);await f.action(d.id,'execute',2);
+  await pool.query("UPDATE automation_drafts SET created_at='2020-01-01T10:00:00Z' WHERE clinic_id=$1 AND id=$2",[f.a.clinic_id,d.id]);
+  const r=(await f.request(reportPath())).body.data.automation;
+  assert.deepEqual(r,{total:1,draft:0,approved:0,rejected:0,failed:0,simulated:1,attempts:1});
+  assert.equal((await f.request(reportPath('2020-01-02'))).body.data.automation.total,0);
+});
+test('report sees committed cohorts consistently during an atomic concurrent status update',async t=>{
+  const f=await fixture(t),id=await analyticAppointment(f,'2020-01-01T10:00:00Z');
+  const recall=randomUUID();await pool.query("INSERT INTO recalls(clinic_id,id,patient_id,due_date) VALUES($1,$2,$3,'2020-01-01')",[f.a.clinic_id,recall,f.a.patient_id]);
+  const writer=await pool.connect();
+  try {
+    await writer.query('BEGIN');
+    await writer.query("UPDATE appointments SET status='no_show' WHERE clinic_id=$1 AND id=$2",[f.a.clinic_id,id]);
+    await writer.query("UPDATE recalls SET status='closed' WHERE clinic_id=$1 AND id=$2",[f.a.clinic_id,recall]);
+    const before=(await f.request(reportPath())).body.data;
+    assert.equal(before.appointments.no_show_rate,0);assert.equal(before.recalls.closure_rate,0);
+    await writer.query('COMMIT');
+    const after=(await f.request(reportPath())).body.data;
+    assert.equal(after.appointments.no_show_rate,1);assert.equal(after.recalls.closure_rate,1);
+  } finally {await writer.query('ROLLBACK');writer.release();}
+});
+test('analytics covers 2000 records beyond UI pagination within existing database timeouts',async t=>{
+  const f=await fixture(t);
+  await pool.query(`INSERT INTO appointments(clinic_id,id,patient_id,practitioner_id,starts_at,ends_at,status)
+    SELECT $1,gen_random_uuid(),$2,$3,'2020-01-01T08:00:00Z'::timestamptz+n*interval '1 minute',
+    '2020-01-01T08:30:00Z'::timestamptz+n*interval '1 minute','completed' FROM generate_series(0,1999) n`,[f.a.clinic_id,f.a.patient_id,f.a.practitioner_id]);
+  await pool.query(`INSERT INTO recalls(clinic_id,id,patient_id,due_date) SELECT $1,gen_random_uuid(),$2,'2020-01-01' FROM generate_series(1,2000)`,[f.a.clinic_id,f.a.patient_id]);
+  assert.equal((await f.request('/v1/appointments?limit=100')).body.data.length,100);
+  const start=performance.now(),response=await f.request(reportPath('2020-01-01','2020-01-02'));
+  assert.equal(response.status,200);assert.equal(response.body.data.appointments.total,2000);assert.equal(response.body.data.recalls.total,2000);
+  assert.equal(response.body.data.daily.reduce((n,d)=>n+d.total,0),2000);
+  const plan=await pool.query('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) '+reportSql,[f.a.clinic_id,'2020-01-01','2020-01-02','America/Vancouver']);
+  t.diagnostic(`Synthetic 2000 appointments + 2000 recalls: HTTP and plan run ${Math.round(performance.now()-start)}ms; SQL execution ${plan.rows[0]['QUERY PLAN'][0]['Execution Time']}ms. Not a production benchmark.`);
+});
+test('report dependency failure returns sanitized 503 and releases the connection',async t=>{
+  const f=await fixture(t);let released=false;
+  const faultyPool={connect:async()=>{
+    const c=await pool.connect();return {query:(sql,args)=>{if(sql===reportSql) throw new Error('private database details');return c.query(sql,args);},release:()=>{released=true;c.release();}};
+  }};
+  const server=createApp({ready:async()=>true,api:createApi(faultyPool)});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try {
+    const response=await fetch(`http://127.0.0.1:${server.address().port}${reportPath()}`,{headers:{authorization:`Bearer ${f.admin.token}`}});
+    assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'service_unavailable'});assert.equal(released,true);
+  } finally {await new Promise(resolve=>server.close(resolve));}
 });
