@@ -43,7 +43,7 @@ jobs:
           path: test-results/demo-preview/*.png
           if-no-files-found: error
           retention-days: 14
-      - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --audit-level=high
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

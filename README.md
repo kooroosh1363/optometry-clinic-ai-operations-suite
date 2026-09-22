@@ -73,7 +73,7 @@ npm test
 TEST_DATABASE_URL='postgres://USER:PASSWORD@localhost:5432/DISPOSABLE_TEST_DB' npm run test:integration
 npx playwright install chromium
 TEST_DATABASE_URL='postgres://USER:PASSWORD@localhost:5432/DISPOSABLE_TEST_DB' npm run test:e2e
-npm audit --omit=dev --audit-level=high
+npm audit --audit-level=high
 ```
 
 Integration tests require a disposable PostgreSQL database and fail when unconfigured. CI also builds the containers and checks behavior during a database outage. See [testing](docs/TESTING.md).

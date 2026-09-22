@@ -12,7 +12,7 @@ Phase 4 adds real PostgreSQL/HTTP tests for consent/history/versioning, missing 
 
 `npm run test:integration` requires TEST_DATABASE_URL for disposable PostgreSQL 16. Foundation tests execute real SQL for migration checksum/rollback and database scheduling/reference constraints. Phase 2 tests additionally use real HTTP sockets and PostgreSQL for token hash/expiry/revocation/deactivation, roles, tenant isolation, validation, scheduling/recalls, upgrade from populated 001, version races, concurrent booking, transactional audit counts and malformed/oversized bodies. Missing database configuration fails instead of skipping. Each API fixture creates two synthetic clinics and deletes only its own records during cleanup.
 
-CI runs both suites, syntax checks, and dependency audit, plus a separate Docker Compose smoke job that starts the stack, checks readiness, stops PostgreSQL, and checks readiness 503 versus liveness 200. Container smoke checks are not included in the Node test count.
+CI runs both suites, syntax checks, and dependency audit (including development dependencies in Phase 6), plus a separate Docker Compose smoke job that starts the stack, checks readiness, stops PostgreSQL, and checks readiness 503 versus liveness 200. Container smoke checks are not included in the Node test count.
 
 Concurrent HTTP tests race overlapping bookings and same-version updates through separate database connections. These are targeted concurrency checks, not load/stress testing.
 

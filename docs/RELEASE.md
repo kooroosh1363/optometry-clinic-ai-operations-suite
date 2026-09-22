@@ -20,7 +20,7 @@ Phase 6 packages the six-phase portfolio reference. It is not a production deplo
 - Read-only, tenant isolation, conflicts, retries, consent invalidation, DST reports and late-response regressions remain covered in earlier suites.
 - Five synthetic screenshots are produced by the walkthrough. Artifact generation is not itself manual visual approval.
 - Setup is checked by the Compose CI job; manual operating instructions are in DEMO_GUIDE.md.
-- No schema migration or new paid dependency in this phase.
+- No schema migration or new paid dependency in this phase. Playwright is patched to 1.55.1 for the browser-download certificate advisory; CI audits production and development dependencies.
 - Owner approves the PR before merge. No automatic release tag or deployment.
 - The final Persian RTL manual follows authorized final merge. Render and visually inspect the PDF, record the final commit, and explain all limitations. Do not call the PDF delivered while this gate is pending.
 
@@ -32,9 +32,8 @@ Booking uses explicit-offset ISO strings; operators must choose the correct date
 
 A single user may author and approve a draft. There is no independent approver policy. A database administrator can alter audit records. Consent is a synthetic application flag, not legal consent collection. Mock retries are explicit and capped at three attempts; no provider failure recovery or exactly-once external delivery is claimed.
 
-Testing covers Chromium and automated accessibility checks, not all browsers, assistive technology users, penetration tests, production load or zero defects. Dependency audit covers the installed production dependency set at run time only.
+Testing covers Chromium and automated accessibility checks, not all browsers, assistive technology users, penetration tests, production load or zero defects. Dependency audit covers the installed production and development dependency set at run time only.
 
 ## Evidence location
 
 Use the Phase 6 PR description for the exact head and CI run. Download the successful run's `synthetic-demo-preview` artifact (14-day retention), or rerun the browser suite locally to regenerate it. CI artifacts are review aids, not a permanently hosted app. The final handoff must distinguish automated verification, actual image inspection and any unavailable live preview.
-
