@@ -1,5 +1,11 @@
 # Administrative API v1
 
+## Phase 5 reports
+
+`GET /v1/analytics?from=2020-01-01&to=2020-01-31` requires any authenticated staff role. Both inclusive clinic-local dates are mandatory, years 2000..2099, span 1..366 days. Unknown or duplicate query parameters, malformed or reversed dates return 400; other methods return 405. Authentication derives the clinic and timezone; clients cannot override them.
+
+The `data` response contains from/to/timezone/as_of, appointments, recalls, automation and a zero-filled daily array. Ratios are fractions in [0,1], or null with no denominator. `appointments.resolved_outcomes` counts completed/no-show bookings that have ended at query time; `no_show_rate` divides ended_no_show by that count. `recalls.closure_rate` divides current closed recalls by all due-date cohort recalls. All components share one SQL snapshot and include all matching records. Read PHASE_5_CONTRACT.md for cohort and interpretation rules. Responses have no patient identifiers/contact fields and use no-store.
+
 ## Phase 4 additions
 
 All routes retain authentication and clinic scope. POST responses use 201, including idempotent replays and recorded mock failures; inspect `data.status` and `receipt_id`.
@@ -76,7 +82,7 @@ The record returns version 2. Sending version 1 again returns 409 version_confli
 - Rescheduling only while scheduled; supply both times and current version. Do not combine status and reschedule.
 - Recall pending → contacted or closed; contacted → closed; closed is terminal.
 
-Scheduled/checked-in records reserve both patient and practitioner intervals. PostgreSQL enforces overlaps under concurrency. Successful mutations and audit metadata commit together. POST has no idempotency-key contract: after a network timeout, read/reconcile before retrying, since a disconnected request may have committed. Delivery idempotency remains Phase 4 scope.
+Scheduled/checked-in records reserve both patient and practitioner intervals. PostgreSQL enforces overlaps under concurrency. Successful mutations and audit metadata commit together. Administrative patient/appointment/recall POST operations have no idempotency-key contract: after a network timeout, read/reconcile before retrying, since a disconnected request may have committed. Automation draft creation and mock execution have the Phase 4 idempotency rules above. Browser cancellation/sign-out cannot undo a transaction already committed by the server.
 
 ## Errors
 

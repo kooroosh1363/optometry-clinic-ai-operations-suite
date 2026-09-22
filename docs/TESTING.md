@@ -1,5 +1,7 @@
 # Verification strategy
 
+Phase 5 adds bounded-range unit tests, real PostgreSQL report fixtures for exact/empty/future cohorts, DST boundaries, tenant/role access, recall semantics, mock automation counts, transaction visibility, sanitized dependency failures and a 2,000-appointment/2,000-recall check beyond pagination. Its EXPLAIN ANALYZE execution time is printed in CI; the existing 2s statement timeout remains the bound. This small synthetic workload is not a production capacity or concurrency benchmark. Report browser tests check figures, errors, accessibility and mobile overflow. Delayed real API response tests verify sign-out/reconnect isolation and that committed-but-late mutation responses cannot restore signed-out data.
+
 Phase 4 adds real PostgreSQL/HTTP tests for consent/history/versioning, missing consent/contact, stale sources, tenant/role boundaries, same/different request-key races, forbidden execution, terminal rejection, revocation/regrant, concurrent mock delivery and replay, partial failure rollback, explicit retry/exhaustion, unexpected failure rollback, and migration 003 checksums. Browser tests exercise consent -> draft -> approval -> mock receipt and check accessibility and mobile overflow. These targeted checks are not a penetration test, compliance audit or guarantee of zero bugs. CI logs are authoritative for each head.
 
 `npm run check` performs JavaScript syntax validation and checks roadmap headings. It is not a linter or a type checker.
