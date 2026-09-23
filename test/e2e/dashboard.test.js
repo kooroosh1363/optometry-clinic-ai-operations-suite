@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
 import { createPool, databaseReady } from '../../src/db.js';
 import { migrateAll } from '../../src/migrate.js';
 import { createApp } from '../../src/app.js';
@@ -26,8 +25,6 @@ test('release walkthrough creates records, gates delivery and reports the same p
   const f = await fixture(), admin = await issueToken(pool, f.clinic_id, f.administrator_id);
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   page.on('dialog', dialog => dialog.accept());
-  const preview = 'test-results/demo-preview'; await mkdir(preview, { recursive: true });
-  const capture = async name => { await expect(page.locator('#token')).toHaveValue(''); await page.screenshot({ path: `${preview}/${name}.png`, fullPage: true }); };
   try {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await connect(page, admin.token);
@@ -50,7 +47,7 @@ test('release walkthrough creates records, gates delivery and reports the same p
     await expect(page.locator('#appointments')).toContainText('checked in');
     await page.getByLabel('Change status for Avery Synthetic').selectOption('completed');
     await expect(page.locator('#appointments')).toContainText('completed');
-    await capture('01-appointments');
+    await expect(page.locator('#token')).toHaveValue('');
     await page.getByRole('button', { name: 'Recall queue', exact: true }).click();
     await page.getByRole('button', { name: '+ Add recall' }).click();
     await page.getByLabel('Patient', { exact: true }).selectOption({ label: 'Avery Synthetic' });
@@ -61,11 +58,9 @@ test('release walkthrough creates records, gates delivery and reports the same p
     await page.getByRole('button', { name: 'Automation', exact: true }).click();
     await expect(page.locator('#automation blockquote')).toContainText('2020-01-03');
     await expect(page.getByRole('button', { name: 'Simulate delivery' })).toHaveCount(0);
-    await capture('02-human-review');
     await page.getByRole('button', { name: 'Approve exact draft' }).click();
     await page.getByRole('button', { name: 'Simulate delivery' }).click();
     await expect(page.getByText('Mock receipt recorded. No real message was sent.')).toBeVisible();
-    await capture('03-mock-receipt');
     expect(Number((await pool.query('SELECT count(*) FROM mock_delivery_receipts WHERE clinic_id=$1', [f.clinic_id])).rows[0].count)).toBe(1);
     await page.getByRole('button', { name: 'Reports', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Run report' })).toBeEnabled();
@@ -75,10 +70,8 @@ test('release walkthrough creates records, gates delivery and reports the same p
     await expect(page.locator('#report-results')).toContainText('0 of 1 ended completed/no-show bookings');
     await expect(page.locator('#report-results')).toContainText('0 of 1 due recalls');
     await expect(page.getByRole('row', { name: '2020-01-02 1 1 0', exact: true })).toBeVisible();
-    await capture('04-reports');
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await capture('05-mobile-reports');
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page.locator('#patients-grid')).toBeEmpty();
     await expect(page.locator('#report-results')).toBeEmpty();
