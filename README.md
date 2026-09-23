@@ -4,7 +4,7 @@ Human-controlled optometry operations reference project, built in six reviewable
 
 **Status: Phase 6 reference-release review. Not a deployed clinic product, medical device, or real client engagement. Use synthetic data only.**
 
-Start with the [demo and recording guide](docs/DEMO_GUIDE.md), [release scope and limitations](docs/RELEASE.md), [technical review Q&A](docs/TECHNICAL_REVIEW_GUIDE.md), and [honest LinkedIn case study](docs/LINKEDIN_CASE_STUDY.md). CI generates five synthetic dashboard screenshots in the `synthetic-demo-preview` artifact. This is not a hosted application. The final Persian manual follows the owner's final authorized merge.
+Start with the [release scope and limitations](docs/RELEASE.md) and [technical review Q&A](docs/TECHNICAL_REVIEW_GUIDE.md). Setup instructions are below. Presentation copy and recording materials are maintained outside this repository. This is not a hosted application.
 
 The repository name includes AI, but the current implementation uses fixed-template automation, not an LLM agent. No open-source license has been granted in this repository; obtain the owner's permission before redistribution or reuse beyond permissions provided by the hosting platform.
 

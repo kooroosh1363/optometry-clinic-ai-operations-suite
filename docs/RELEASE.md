@@ -11,15 +11,15 @@ Phase 6 packages the six-phase portfolio reference. It is not a production deplo
 | Database | PostgreSQL constraints, 3 checksum-verified migrations, transactions | Shared development DB owner; no DB row-level security or tamper-proof audit |
 | Automation | Immutable template, consent/source checks, approval/rejection, bounded mock retries | Database receipt only; no email/SMS, LLM, background worker or external integrations |
 | Analytics | Clinic-local cohorts, daily counts, explicit null denominators | Descriptive current statuses, not historical snapshots, predictions or causal ROI |
-| Packaging | Docker Compose, CI, reproducible walkthrough, recording guide, technical review guide | Local reference; no public hosting, backups/restore drill, monitoring or clinical certification |
+| Packaging | Docker Compose, CI, real-API browser walkthrough, technical review guide | Local reference; no public hosting, backups/restore drill, monitoring or clinical certification |
 
 ## Acceptance gates
 
 - Latest PR head must pass syntax, unit/HTTP, PostgreSQL integration, Chromium and container jobs.
 - Release walkthrough must create its patient, consent, appointment and recall through the real UI/API, require approval before simulation, find exactly one persisted receipt, and report the same appointment/recall.
 - Read-only, tenant isolation, conflicts, retries, consent invalidation, DST reports and late-response regressions remain covered in earlier suites.
-- Five synthetic screenshots are produced by the walkthrough. Artifact generation is not itself manual visual approval.
-- Setup is checked by the Compose CI job; manual operating instructions are in DEMO_GUIDE.md.
+- The browser walkthrough verifies behavior without producing a presentation screenshot package.
+- Setup is checked by the Compose CI job; operating instructions are in README.md.
 - No schema migration or new paid dependency in this phase. Playwright is patched to 1.55.1 for the browser-download certificate advisory; CI audits production and development dependencies.
 - Owner approves the PR before merge. No automatic release tag or deployment.
 - The final Persian RTL manual follows authorized final merge. Render and visually inspect the PDF, record the final commit, and explain all limitations. Do not call the PDF delivered while this gate is pending.
@@ -36,4 +36,4 @@ Testing covers Chromium and automated accessibility checks, not all browsers, as
 
 ## Evidence location
 
-Use the Phase 6 PR description for the exact head and CI run. Download the successful run's `synthetic-demo-preview` artifact (14-day retention), or rerun the browser suite locally to regenerate it. CI artifacts are review aids, not a permanently hosted app. The final handoff must distinguish automated verification, actual image inspection and any unavailable live preview.
+Use each PR description and its latest CI run for verification evidence. Presentation screenshot generation and upload have been removed at the owner's request; existing historical artifacts require separate removal in GitHub Actions. The final handoff must distinguish automated verification, actual image inspection and any unavailable live preview.
